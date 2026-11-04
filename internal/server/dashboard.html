@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YTM Beacon</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f5f7; --card: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d8dce1;
+    --ok: #1a7f37; --bad: #cf222e; --warn: #9a6700; --accent: #5865f2; --accent-fg: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --card: #1f2023; --fg: #e3e5e8; --muted: #9aa0a8; --line: #33363b;
+      --ok: #3fb950; --bad: #f85149; --warn: #d29922; --accent: #7983f5; --accent-fg: #101114;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  ul.checks { list-style: none; padding: 0; margin: 0; }
+  ul.checks li { display: flex; gap: 10px; padding: 5px 0; }
+  .mark { width: 18px; font-weight: 700; text-align: center; flex: none; }
+  .ok .mark { color: var(--ok); } .bad .mark { color: var(--bad); } .warn .mark { color: var(--warn); }
+  .detail { display: block; color: var(--muted); font-size: 13px; }
+  .np { display: flex; gap: 14px; align-items: center; }
+  .np img { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; background: var(--line); flex: none; }
+  .np .t { font-weight: 600; } .np .a { color: var(--muted); }
+  label.row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  label.col { display: block; padding: 6px 0; }
+  label.col > span { display: block; font-weight: 600; margin-bottom: 4px; }
+  input[type=text], input[type=number], select { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+  input[type=number] { width: 100px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  button:hover { filter: brightness(1.08); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #msg { margin-top: 10px; font-size: 14px; min-height: 1.4em; }
+  .hint { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  a { color: var(--accent); }
+  footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 24px; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>YTM Beacon</h1>
+  <p class="sub">Shows what you're playing on YouTube Music in your Discord profile.</p>
+
+  <section class="card">
+    <h2>Status</h2>
+    <ul class="checks" id="checks"><li class="warn"><span class="mark">…</span><span>Loading…</span></li></ul>
+  </section>
+
+  <section class="card" id="npCard" hidden>
+    <h2>Now playing</h2>
+    <div class="np">
+      <img id="npArt" alt="" referrerpolicy="no-referrer">
+      <div style="min-width:0">
+        <div class="t" id="npTitle"></div>
+        <div class="a" id="npArtist"></div>
+        <div class="a" id="npState"></div>
+      </div>
+    </div>
+    <div class="bar"><i id="npBar"></i></div>
+  </section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <label class="col">
+      <span>Discord application ID</span>
+      <input type="text" id="clientId" inputmode="numeric" autocomplete="off" placeholder="Leave empty to use the built-in one">
+      <p class="hint">Only needed if you want your own app name. Create one at
+        <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">discord.com/developers/applications</a>
+        and paste its Application ID here.</p>
+    </label>
+    <label class="row"><input type="checkbox" id="showButtons"> Show a “Listen on YouTube Music” button</label>
+    <label class="row"><input type="checkbox" id="showAlbumArt"> Show album art</label>
+    <label class="row"><input type="checkbox" id="showPaused"> Keep showing while paused</label>
+    <label class="col">
+      <span>Hide when paused for longer than (minutes)</span>
+      <input type="number" id="pauseTimeoutMinutes" min="1" max="1440">
+    </label>
+    <label class="col">
+      <span>Text next to your name in the member list</span>
+      <select id="statusDisplay">
+        <option value="name">Listening to YouTube Music</option>
+        <option value="details">Listening to the song title</option>
+        <option value="state">Listening to the artist name</option>
+      </select>
+    </label>
+    <div class="actions"><button class="primary" id="save">Save settings</button></div>
+    <div id="msg" role="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>Troubleshooting</h2>
+    <p class="hint" style="margin-top:0">If something isn't working, these help you (or us) find out why.</p>
+    <div class="actions">
+      <button id="test">Show a test song on Discord</button>
+      <button id="copy">Copy diagnostics</button>
+      <button id="logs">Show log</button>
+    </div>
+    <pre id="logBox" hidden style="white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:260px;overflow:auto;background:var(--bg);padding:10px;border-radius:6px;margin:12px 0 0"></pre>
+  </section>
+
+  <footer>YTM Beacon <span id="ver"></span> · <a href="https://github.com/dash1101/ytm-beacon#troubleshooting" target="_blank" rel="noopener">Help</a></footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let status = null;
+let formLoaded = false;
+
+function row(kind, text, detail) {
+  const li = document.createElement('li');
+  li.className = kind;
+  const m = document.createElement('span'); m.className = 'mark';
+  m.textContent = kind === 'ok' ? '✓' : kind === 'warn' ? '!' : '✗';
+  const b = document.createElement('span'); b.textContent = text;
+  if (detail) { const d = document.createElement('span'); d.className = 'detail'; d.textContent = detail; b.appendChild(d); }
+  li.append(m, b);
+  return li;
+}
+
+function render(s) {
+  status = s;
+  $('ver').textContent = 'v' + s.version;
+  const ul = $('checks'); ul.textContent = '';
+  ul.append(row('ok', 'YTM Beacon is running', `Port ${s.port}, up ${Math.round(s.uptimeSec / 60)} min`));
+
+  const d = s.discord;
+  if (d.state === 'connected') ul.append(row('ok', 'Connected to Discord', d.user ? `Signed in as ${d.user}` : ''));
+  else if (d.state === 'no-client-id') ul.append(row('bad', 'No Discord application ID', 'Add one under Settings below.'));
+  else ul.append(row('bad', "Can't reach Discord", (d.lastError || 'Is the Discord app running?') + ' (it keeps retrying automatically)'));
+  if (d.state === 'connected' && d.lastError) ul.append(row('warn', 'Discord had a problem with the last update', d.lastError));
+
+  const seen = s.extension.lastSeenAgoSec;
+  if (seen == null) ul.append(row('warn', 'No music detected yet', 'Install the browser extension, open music.youtube.com and play a song.'));
+  else if (seen > 20) ul.append(row('warn', 'Browser extension went quiet', `Last heard ${seen}s ago. Reload your YouTube Music tab.`));
+  else ul.append(row('ok', 'Receiving from the browser extension', s.extension.sources.map(x => x.agent || 'browser').join(', ')));
+
+  if (s.presenceActive) ul.append(row('ok', 'Visible on your Discord profile'));
+  else if (s.nowPlaying && s.nowPlaying.state === 'paused') ul.append(row('warn', 'Hidden: paused', 'Adjust under Settings.'));
+  else ul.append(row('warn', 'Nothing showing on Discord right now'));
+
+  const np = s.nowPlaying;
+  $('npCard').hidden = !np;
+  if (np) {
+    $('npTitle').textContent = np.title;
+    $('npArtist').textContent = np.artist + (np.album ? ' · ' + np.album : '');
+    $('npState').textContent = np.state === 'paused' ? 'Paused' : 'Playing';
+    const art = $('npArt');
+    if (np.artwork && art.dataset.src !== np.artwork) { art.src = np.artwork; art.dataset.src = np.artwork; }
+    if (!np.artwork) { art.removeAttribute('src'); art.dataset.src = ''; }
+    $('npBar').style.width = np.duration > 0 ? Math.min(100, (np.position / np.duration) * 100) + '%' : '0';
+  }
+
+  if (!formLoaded) {
+    const c = s.config;
+    $('clientId').value = c.clientId || '';
+    $('showButtons').checked = c.showButtons;
+    $('showAlbumArt').checked = c.showAlbumArt;
+    $('showPaused').checked = c.showPaused;
+    $('pauseTimeoutMinutes').value = c.pauseTimeoutMinutes;
+    $('statusDisplay').value = c.statusDisplay;
+    formLoaded = true;
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/v1/status', { cache: 'no-store' });
+    render(await r.json());
+  } catch (e) {
+    $('checks').textContent = '';
+    $('checks').append(row('bad', 'The YTM Beacon app stopped responding', 'Start it again, then reload this page.'));
+  }
+}
+
+function msg(text, bad) { const m = $('msg'); m.textContent = text; m.style.color = bad ? 'var(--bad)' : 'var(--ok)'; }
+
+$('save').onclick = async () => {
+  const body = {
+    clientId: $('clientId').value.trim(),
+    showButtons: $('showButtons').checked,
+    showAlbumArt: $('showAlbumArt').checked,
+    showPaused: $('showPaused').checked,
+    pauseTimeoutMinutes: parseInt($('pauseTimeoutMinutes').value, 10) || 5,
+    statusDisplay: $('statusDisplay').value,
+  };
+  const r = await fetch('/v1/config', { method: 'POST', body: JSON.stringify(body) });
+  const j = await r.json();
+  if (r.ok) { msg('Saved.'); poll(); } else msg(j.error || 'Could not save.', true);
+};
+
+$('test').onclick = async () => {
+  await fetch('/v1/test', { method: 'POST' });
+  msg('Sent a test song. Check your Discord profile (it disappears after 30 seconds).');
+  setTimeout(poll, 800);
+};
+
+async function logText() { return (await fetch('/v1/logs', { cache: 'no-store' })).text(); }
+
+$('logs').onclick = async () => {
+  const box = $('logBox');
+  box.hidden = !box.hidden;
+  if (!box.hidden) box.textContent = (await logText()) || '(the log is empty)';
+};
+
+$('copy').onclick = async () => {
+  const s = JSON.parse(JSON.stringify(status || {}));
+  if (s.nowPlaying) { delete s.nowPlaying.artwork; }
+  const text = 'YTM Beacon diagnostics\n' + JSON.stringify(s, null, 2) + '\n\n--- log ---\n' + (await logText());
+  try { await navigator.clipboard.writeText(text); msg('Copied. Paste it into your bug report.'); }
+  catch (e) { msg('Could not copy automatically. Use "Show log" and copy from there.', true); }
+};
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go vet ./...
+      - run: go test -race -count=1 -timeout 120s ./...
+      - run: go build ./cmd/ytm-beacon
+
+  cross-build:
+    name: Build every platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: scripts/build-release.sh ci
+      - name: Installer scripts parse
+        run: sh -n scripts/install.sh
+
+  extension:
+    name: Extension checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: JavaScript syntax
+        run: for f in extension/*.js; do node --check "$f"; done
+      - name: Build the extension folders
+        run: go run ./cmd/ytm-beacon extension --out build-ext
+      - name: web-ext lint (advisory)
+        continue-on-error: true
+        run: |
+          npx --yes web-ext@8 lint --source-dir build-ext/firefox
+          npx --yes web-ext@8 lint --source-dir build-ext/chrome

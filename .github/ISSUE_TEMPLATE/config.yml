@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/dash1101/ytm-beacon/blob/main/docs/TROUBLESHOOTING.md
+    about: Most problems are answered here. Run `ytm-beacon doctor` first.

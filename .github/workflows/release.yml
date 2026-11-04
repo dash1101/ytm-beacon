@@ -1,0 +1,50 @@
+name: Release
+
+# Push a tag like v0.1.0 to publish a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Build all platforms
+        run: scripts/build-release.sh "${GITHUB_REF_NAME}"
+
+      # Optional: runs only when the repository has the two AMO_* secrets
+      # (addons.mozilla.org API keys). Without them this step is skipped and
+      # users load the Firefox add-on manually.
+      - name: Sign the Firefox add-on
+        if: env.AMO_JWT_ISSUER != ''
+        run: |
+          npx --yes web-ext@8 sign \
+            --source-dir dist/ext/firefox \
+            --channel unlisted \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET" \
+            --artifacts-dir dist/signed
+          cp dist/signed/*.xpi dist/ytm-beacon-firefox.xpi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.tar.gz dist/*.zip dist/*.xpi dist/checksums.txt)
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes --verify-tag

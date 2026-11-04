@@ -1,0 +1,8 @@
+/dist/
+/build-ext/
+/ytm-beacon
+/ytm-beacon.exe
+/ytm-beacon-bg.exe
+*.test
+*.log
+.DS_Store
