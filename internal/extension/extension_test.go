@@ -86,8 +86,8 @@ func TestPackagesAreComplete(t *testing.T) {
 			if len(m.HostPermissions) != 2 || m.HostPermissions[0] != "http://127.0.0.1/*" || m.HostPermissions[1] != "https://music.youtube.com/*" {
 				t.Errorf("host permissions = %v (should only be the local app and music.youtube.com)", m.HostPermissions)
 			}
-			if len(m.Permissions) != 1 || m.Permissions[0] != "scripting" {
-				t.Errorf("permissions = %v (should only be scripting)", m.Permissions)
+			if len(m.Permissions) != 2 || m.Permissions[0] != "scripting" || m.Permissions[1] != "storage" {
+				t.Errorf("permissions = %v (should only be scripting and storage)", m.Permissions)
 			}
 
 			need := []string{m.Action.Popup}

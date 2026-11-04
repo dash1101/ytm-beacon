@@ -4,6 +4,9 @@ package extension
 
 import (
 	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +23,12 @@ import (
 // "chrome"; Firefox takes "firefox".
 var Browsers = []string{"chrome", "firefox"}
 
+// Placeholders in the extension sources that are filled in when packaging.
+const (
+	versionPlaceholder = "__VERSION__" // in manifests
+	buildPlaceholder   = "__BUILD__"   // in .js files
+)
+
 var numericVersion = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)`)
 
 // ManifestVersion turns an app version like "v1.2.3-rc1" or "dev" into the
@@ -35,16 +44,7 @@ func isManifest(name string) bool {
 	return strings.HasPrefix(name, "manifest.") && strings.HasSuffix(name, ".json")
 }
 
-// walk calls fn for every file of the extension for one browser, with the
-// right manifest installed as manifest.json.
-func walk(src fs.FS, browser, version string, fn func(name string, data []byte) error) error {
-	known := false
-	for _, b := range Browsers {
-		known = known || b == browser
-	}
-	if !known {
-		return fmt.Errorf("unknown browser %q (use chrome or firefox)", browser)
-	}
+func sourceFiles(src fs.FS) ([]string, error) {
 	var names []string
 	err := fs.WalkDir(src, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -55,10 +55,48 @@ func walk(src fs.FS, browser, version string, fn func(name string, data []byte) 
 		}
 		return nil
 	})
+	sort.Strings(names)
+	return names, err
+}
+
+// Build identifies this exact version of the extension code (the same for every
+// browser flavour). The app tells a running extension its build; when the two
+// differ, the extension has been left behind by an update and reloads itself.
+func Build(src fs.FS, version string) string {
+	names, err := sourceFiles(src)
+	if err != nil {
+		return ""
+	}
+	h := sha256.New()
+	for _, name := range names {
+		data, err := fs.ReadFile(src, name)
+		if err != nil {
+			return ""
+		}
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write(data)
+		h.Write([]byte{0})
+	}
+	h.Write([]byte(ManifestVersion(version)))
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}
+
+// walk calls fn for every file of the extension for one browser, with the
+// right manifest installed as manifest.json and the placeholders filled in.
+func walk(src fs.FS, browser, version string, fn func(name string, data []byte) error) error {
+	known := false
+	for _, b := range Browsers {
+		known = known || b == browser
+	}
+	if !known {
+		return fmt.Errorf("unknown browser %q (use chrome or firefox)", browser)
+	}
+	names, err := sourceFiles(src)
 	if err != nil {
 		return err
 	}
-	sort.Strings(names)
+	build := Build(src, version)
 
 	sawManifest := false
 	for _, name := range names {
@@ -67,13 +105,16 @@ func walk(src fs.FS, browser, version string, fn func(name string, data []byte) 
 			return err
 		}
 		out := name
-		if isManifest(path.Base(name)) {
+		switch {
+		case isManifest(path.Base(name)):
 			if path.Base(name) != "manifest."+browser+".json" {
 				continue // another browser's manifest
 			}
 			out = "manifest.json"
-			data = []byte(strings.ReplaceAll(string(data), "__VERSION__", ManifestVersion(version)))
+			data = bytes.ReplaceAll(data, []byte(versionPlaceholder), []byte(ManifestVersion(version)))
 			sawManifest = true
+		case strings.HasSuffix(name, ".js"):
+			data = bytes.ReplaceAll(data, []byte(buildPlaceholder), []byte(build))
 		}
 		if err := fn(out, data); err != nil {
 			return err

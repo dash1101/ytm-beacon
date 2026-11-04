@@ -117,8 +117,9 @@ func reportRunning(r *report, st *server.Status) {
 	switch {
 	case seen == nil:
 		r.fail("The browser extension has never reported in")
-		r.fix("Install the extension in your browser (run `ytm-beacon extension` to see where it is),")
-		r.fix("then open https://music.youtube.com and play a song. Reload the YouTube Music tab if it was already open.")
+		r.fix("Add the extension to your browser: the setup page at http://127.0.0.1:%d/ shows the steps", st.Port)
+		r.fix("(or run `ytm-beacon extension` to see the folder). Then play a song on https://music.youtube.com.")
+		r.fix("Already installed? Click the extension's toolbar icon: it says what is wrong in your YouTube Music tab.")
 	case *seen > 20:
 		r.warn("The browser extension last reported %ds ago", *seen)
 		r.fix("Open or reload your YouTube Music tab. Make sure the extension is enabled.")

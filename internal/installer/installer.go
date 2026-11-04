@@ -17,6 +17,7 @@ import (
 	"github.com/dash1101/ytm-beacon/internal/autostart"
 	"github.com/dash1101/ytm-beacon/internal/extension"
 	"github.com/dash1101/ytm-beacon/internal/paths"
+	"github.com/dash1101/ytm-beacon/internal/presence"
 	"github.com/dash1101/ytm-beacon/internal/server"
 	"github.com/dash1101/ytm-beacon/internal/version"
 )
@@ -26,6 +27,13 @@ import (
 // appears. Other systems don't need it.
 const BackgroundExeName = "ytm-beacon-bg.exe"
 
+// Options tune `install`.
+type Options struct {
+	// NoOpen stops the installer from opening the setup page in the browser.
+	// Setting YTM_BEACON_NO_OPEN=1 does the same.
+	NoOpen bool
+}
+
 func installedExe() (string, error) {
 	dir, err := paths.BinDir()
 	if err != nil {
@@ -34,8 +42,13 @@ func installedExe() (string, error) {
 	return filepath.Join(dir, paths.ExeName("ytm-beacon")), nil
 }
 
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 // Install does everything. extSrc is the embedded extension (rooted at its manifest files).
-func Install(out io.Writer, extSrc fs.FS) error {
+func Install(out io.Writer, extSrc fs.FS, opt Options) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("cannot find this program's own path: %w", err)
@@ -49,9 +62,15 @@ func Install(out io.Writer, extSrc fs.FS) error {
 	}
 	binDir := filepath.Dir(target)
 
-	fmt.Fprintf(out, "[1/4] Installing the program to %s\n", binDir)
+	// Has an extension ever reported in? If so this is an update, not a first setup.
+	firstRun := true
+	if m, err := paths.ConnectedMarker(); err == nil && fileExists(m) {
+		firstRun = false
+	}
+
+	fmt.Fprintln(out, "Installing YTM Beacon...")
 	if err := server.Quit(); err != nil {
-		fmt.Fprintf(out, "      note: could not stop the running copy (%v); continuing\n", err)
+		fmt.Fprintf(out, "  --  could not stop the running copy (%v); continuing\n", err)
 	}
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return err
@@ -78,8 +97,8 @@ func Install(out io.Writer, extSrc fs.FS) error {
 	}
 	allowToRun(target)
 	pathNote := ensureOnPath(binDir)
+	fmt.Fprintf(out, "  OK  Program installed: %s\n", target)
 
-	fmt.Fprintln(out, "[2/4] Unpacking the browser extension")
 	for _, b := range extension.Browsers {
 		dir, err := paths.ExtensionDir(b)
 		if err != nil {
@@ -89,50 +108,62 @@ func Install(out io.Writer, extSrc fs.FS) error {
 			return fmt.Errorf("could not unpack the %s extension: %w", b, err)
 		}
 	}
+	fmt.Fprintln(out, "  OK  Browser extension unpacked")
 
-	fmt.Fprintln(out, "[3/4] Setting it to start when you log in")
 	how, err := autostart.Install(daemon)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "      done: %s\n", how)
+	fmt.Fprintf(out, "  OK  Starts when you log in: %s\n", how)
 
-	fmt.Fprintln(out, "[4/4] Starting it")
-	started := false
+	var st *server.Status
 	for i := 0; i < 40; i++ {
-		if _, err := server.FetchStatus(); err == nil {
-			started = true
+		if s, err := server.FetchStatus(); err == nil {
+			st = s
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	if started {
-		fmt.Fprintln(out, "      running")
+	if st == nil {
+		fmt.Fprintln(out, "  !!  It did not start. Run `ytm-beacon doctor` to see why.")
 	} else {
-		fmt.Fprintln(out, "      it has not answered yet. Run `ytm-beacon doctor` to see why.")
+		fmt.Fprintln(out, "  OK  Running")
+		switch st.Discord.State {
+		case presence.StateConnected:
+			fmt.Fprintf(out, "  OK  Connected to Discord as %s\n", st.Discord.User)
+		case presence.StateNoClientID:
+			fmt.Fprintf(out, "  !!  No Discord application ID is set. Open http://127.0.0.1:%d/ to add one.\n", st.Port)
+		default:
+			fmt.Fprintln(out, "  --  Discord isn't open yet. It connects by itself when you open the Discord app.")
+		}
 	}
 
-	chrome, _ := paths.ExtensionDir("chrome")
-	firefox, _ := paths.ExtensionDir("firefox")
-	fmt.Fprintf(out, `
-Installed. One thing left: add the extension to your browser (one time).
-
-  Chrome, Brave, Edge, Opera, Vivaldi:
-    1. Open chrome://extensions (brave://extensions, edge://extensions ...)
-    2. Turn on "Developer mode"
-    3. Click "Load unpacked" and choose this folder:
-         %s
-
-  Firefox:
-    Install the signed .xpi from the Releases page (permanent), or for a quick
-    try: open about:debugging#/runtime/this-firefox, click "Load Temporary
-    Add-on..." and choose manifest.json inside:
-         %s
-
-Then open https://music.youtube.com and play a song.
-Dashboard and settings: http://127.0.0.1:%d/
-Something wrong? Run:  ytm-beacon doctor
-`, chrome, firefox, server.Ports[0])
+	dash := fmt.Sprintf("http://127.0.0.1:%d/", server.Ports[0])
+	if st != nil {
+		dash = fmt.Sprintf("http://127.0.0.1:%d/", st.Port)
+	}
+	if firstRun {
+		chrome, _ := paths.ExtensionDir("chrome")
+		firefox, _ := paths.ExtensionDir("firefox")
+		fmt.Fprintf(out, "\nOne step left: add the browser extension (one time).\n")
+		opened := false
+		if !opt.NoOpen && os.Getenv("YTM_BEACON_NO_OPEN") == "" && st != nil {
+			opened = openURL(dash) == nil
+		}
+		if opened {
+			fmt.Fprintf(out, "  The setup page just opened in your browser; it shows the exact steps.\n")
+		} else {
+			fmt.Fprintf(out, "  Open %s for the exact steps.\n", dash)
+		}
+		fmt.Fprintf(out, "\n  Chrome, Brave, Edge, Opera, Vivaldi: open chrome://extensions, turn on Developer mode,\n")
+		fmt.Fprintf(out, "  click \"Load unpacked\" and choose:\n    %s\n", chrome)
+		fmt.Fprintf(out, "  Firefox: open about:debugging#/runtime/this-firefox, click \"Load Temporary Add-on...\"\n")
+		fmt.Fprintf(out, "  and choose manifest.json in:\n    %s\n", firefox)
+		fmt.Fprintf(out, "\nThen play a song on music.youtube.com. Anything wrong? Run:  ytm-beacon doctor\n")
+	} else {
+		fmt.Fprintf(out, "\nDone. The browser extension reloads itself within a few seconds, so there is nothing to do in your browser.\n")
+		fmt.Fprintf(out, "Dashboard and settings: %s\n", dash)
+	}
 	if pathNote != "" {
 		fmt.Fprintln(out, "\n"+pathNote)
 	}
@@ -153,14 +184,20 @@ func Uninstall(out io.Writer, purge bool) error {
 	if data, err := paths.DataDir(); err == nil {
 		fmt.Fprintln(out, "Removing the extension copy...")
 		_ = os.RemoveAll(filepath.Join(data, "extension"))
+		if m, err := paths.ConnectedMarker(); err == nil {
+			_ = os.Remove(m)
+		}
 	}
 	if target, err := installedExe(); err == nil {
 		fmt.Fprintf(out, "Removing %s ...\n", target)
 		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(out, "  could not remove it (%v). You can delete it by hand.\n", err)
+			// Windows: this very program is running from that file.
+			scheduleDelete(target)
+			fmt.Fprintln(out, "  it will be removed a moment after this window closes")
 		}
 		if runtime.GOOS == "windows" {
 			_ = os.Remove(filepath.Join(filepath.Dir(target), BackgroundExeName))
+			_ = os.Remove(target + ".old")
 			removeFromPath(filepath.Dir(target))
 		}
 	}
@@ -173,7 +210,11 @@ func Uninstall(out io.Writer, purge bool) error {
 			_ = os.RemoveAll(d)
 		}
 	}
-	fmt.Fprintln(out, "\nDone. Remove the extension from your browser's extensions page too (it can't be removed from outside the browser).")
+	fmt.Fprintln(out, "\nYTM Beacon is removed. One thing is left that only you can do: remove the extension from your browser")
+	fmt.Fprintln(out, "(open its extensions page, find YTM Beacon, click Remove). Nothing else of it remains.")
+	if !purge {
+		fmt.Fprintln(out, "Your settings were kept, in case you install it again. Run `ytm-beacon uninstall --purge` to delete them too.")
+	}
 	return nil
 }
 
@@ -184,8 +225,11 @@ func sameFile(a, b string) bool {
 }
 
 // copyFile replaces dst atomically. The retry loop is for Windows, where the
-// old program may take a moment to release its file after being stopped.
+// old program may take a moment to release its file after being stopped, and
+// where a running program (for example the one doing an update) can't be
+// overwritten but can be renamed out of the way.
 func copyFile(src, dst string) error {
+	_ = os.Remove(dst + ".old") // left over from a previous replace of a running program
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -210,6 +254,14 @@ func copyFile(src, dst string) error {
 		if last = os.Rename(tmp, dst); last == nil {
 			return nil
 		}
+		if runtime.GOOS == "windows" {
+			old := dst + ".old"
+			if os.Rename(dst, old) == nil {
+				if last = os.Rename(tmp, dst); last == nil {
+					return nil
+				}
+			}
+		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	os.Remove(tmp)
@@ -222,6 +274,24 @@ func allowToRun(exe string) {
 	if runtime.GOOS == "darwin" {
 		_ = exec.Command("xattr", "-d", "com.apple.quarantine", exe).Run()
 	}
+}
+
+// openURL opens a page in the user's default browser without waiting for it.
+func openURL(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }() // reap it; xdg-open exits quickly
+	return nil
 }
 
 // ensureOnPath makes `ytm-beacon` usable from a terminal. On Windows it adds

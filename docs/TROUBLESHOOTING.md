@@ -131,6 +131,17 @@ If you run the *browser* as a Flatpak/Snap, that's fine: the extension only need
   `~/Library/Application Support/ytm-beacon/` on macOS, `%LOCALAPPDATA%\ytm-beacon\` on Windows).
   Run `ytm-beacon run --debug` in a terminal to log every update.
 
+## Updating and uninstalling
+
+- **Update:** `ytm-beacon update` (add `--check` to only look). The extension reloads itself within a
+  few seconds. If your extension is from before that feature existed, reload it once on the browser's
+  extensions page; after that updates are automatic.
+- **`update` says "no published release found":** the project has no public release yet, or you are
+  offline.
+- **Uninstall:** `ytm-beacon uninstall` (add `--purge` to also delete settings), then remove the
+  extension on the browser's extensions page. One-line uninstallers and manual steps for every
+  system are in the [README](../README.md#uninstalling).
+
 ## Still stuck?
 
 [Open an issue](https://github.com/dash1101/ytm-beacon/issues/new/choose) and paste the output of

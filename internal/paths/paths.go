@@ -97,6 +97,17 @@ func LogFile() (string, error) {
 	return filepath.Join(d, AppName+".log"), nil
 }
 
+// ConnectedMarker is an empty file created the first time a browser extension
+// reports in. Its existence tells the dashboard and installer that setup is
+// finished, so they stop showing first-run steps.
+func ConnectedMarker() (string, error) {
+	d, err := DataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "extension-connected"), nil
+}
+
 // ExtensionDir is where `install` unpacks the extension for the given browser
 // family ("chrome" or "firefox").
 func ExtensionDir(browser string) (string, error) {

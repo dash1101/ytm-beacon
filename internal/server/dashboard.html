@@ -46,6 +46,12 @@
   footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 24px; }
   .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
+  code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 13px; word-break: break-all; }
+  button.small { padding: 2px 10px; font-size: 13px; margin-left: 6px; }
+  ol.steps { padding-left: 22px; margin: 8px 0; }
+  ol.steps li { margin: 8px 0; }
+  .welcome { border-color: var(--accent); }
+  .welcome h2 { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -56,6 +62,34 @@
   <section class="card">
     <h2>Status</h2>
     <ul class="checks" id="checks"><li class="warn"><span class="mark">…</span><span>Loading…</span></li></ul>
+  </section>
+
+  <section class="card welcome" id="setupCard" hidden>
+    <h2>Get started</h2>
+    <p style="margin-top:0">One step left: add the browser extension (one time). It tells YTM Beacon what's playing.
+      This box disappears by itself once YouTube Music is detected.</p>
+    <div id="setupChrome">
+      <ol class="steps">
+        <li>Open your browser's extensions page: copy <code id="extUrl">chrome://extensions</code>
+          <button class="small" data-copy="extUrl">Copy</button> and paste it into the address bar.</li>
+        <li>Turn on <b>Developer mode</b> (top right).</li>
+        <li>Click <b>Load unpacked</b> and choose this folder:<br>
+          <code id="extPathChrome"></code> <button class="small" data-copy="extPathChrome">Copy</button></li>
+        <li>Open <a href="https://music.youtube.com" target="_blank" rel="noopener">music.youtube.com</a> and play a song.</li>
+      </ol>
+    </div>
+    <div id="setupFirefox" hidden>
+      <ol class="steps">
+        <li>Open <code id="ffUrl">about:debugging#/runtime/this-firefox</code>
+          <button class="small" data-copy="ffUrl">Copy</button> in the address bar.</li>
+        <li>Click <b>Load Temporary Add-on...</b> and choose <code>manifest.json</code> inside this folder:<br>
+          <code id="extPathFirefox"></code> <button class="small" data-copy="extPathFirefox">Copy</button></li>
+        <li>Open <a href="https://music.youtube.com" target="_blank" rel="noopener">music.youtube.com</a> and play a song.</li>
+      </ol>
+      <p class="hint">Firefox forgets temporary add-ons when it restarts. A permanent, signed version is on the
+        project's Releases page.</p>
+    </div>
+    <p class="hint"><a href="#" id="switchBrowser">I use Firefox</a></p>
   </section>
 
   <section class="card" id="npCard" hidden>
@@ -110,6 +144,21 @@
     <pre id="logBox" hidden style="white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:260px;overflow:auto;background:var(--bg);padding:10px;border-radius:6px;margin:12px 0 0"></pre>
   </section>
 
+  <details class="card" id="maintenance">
+    <summary style="cursor:pointer;font-weight:600">Update or uninstall</summary>
+    <p class="hint">Run these in a terminal (on Windows, PowerShell):</p>
+    <ul style="padding-left:20px;margin:8px 0">
+      <li><b>Update</b> to the latest version: <code id="cmdUpdate">ytm-beacon update</code>
+        <button class="small" data-copy="cmdUpdate">Copy</button><br>
+        <span class="hint">The browser extension reloads itself afterwards. Nothing to do in the browser.</span></li>
+      <li style="margin-top:8px"><b>Uninstall</b> everything: <code id="cmdUninstall">ytm-beacon uninstall</code>
+        <button class="small" data-copy="cmdUninstall">Copy</button><br>
+        <span class="hint">It stops the app and removes the start-at-login entry and the program. Add
+          <code>--purge</code> to also delete your settings. Afterwards, remove the extension on your browser's
+          extensions page (find YTM Beacon, click Remove).</span></li>
+    </ul>
+  </details>
+
   <footer>YTM Beacon <span id="ver"></span> · <a href="https://github.com/dash1101/ytm-beacon#troubleshooting" target="_blank" rel="noopener">Help</a></footer>
 </main>
 
@@ -131,6 +180,7 @@ function row(kind, text, detail) {
 
 function render(s) {
   status = s;
+  renderSetup(s);
   $('ver').textContent = 'v' + s.version;
   const ul = $('checks'); ul.textContent = '';
   ul.append(row('ok', 'YTM Beacon is running', `Port ${s.port}, up ${Math.round(s.uptimeSec / 60)} min`));
@@ -221,6 +271,38 @@ $('copy').onclick = async () => {
   try { await navigator.clipboard.writeText(text); msg('Copied. Paste it into your bug report.'); }
   catch (e) { msg('Could not copy automatically. Use "Show log" and copy from there.', true); }
 };
+
+
+// ---- first-run setup card ----
+let useFirefox = /Firefox\//.test(navigator.userAgent);
+function browserScheme() {
+  if (navigator.brave) return 'brave';
+  if (/Edg\//.test(navigator.userAgent)) return 'edge';
+  if (/OPR\//.test(navigator.userAgent)) return 'opera';
+  if (/Vivaldi/.test(navigator.userAgent)) return 'vivaldi';
+  return 'chrome';
+}
+function renderSetup(s) {
+  const done = s.extension.everConnected;
+  $('setupCard').hidden = done;
+  if (done) return;
+  const dirs = s.extensionDirs || {};
+  $('extUrl').textContent = browserScheme() + '://extensions';
+  $('extPathChrome').textContent = dirs.chrome || '';
+  $('extPathFirefox').textContent = dirs.firefox || '';
+  $('setupChrome').hidden = useFirefox;
+  $('setupFirefox').hidden = !useFirefox;
+  $('switchBrowser').textContent = useFirefox ? 'I use Chrome, Brave, Edge, Opera or Vivaldi' : 'I use Firefox';
+}
+$('switchBrowser').onclick = (e) => { e.preventDefault(); useFirefox = !useFirefox; if (status) renderSetup(status); };
+document.addEventListener('click', async (e) => {
+  const id = e.target && e.target.dataset && e.target.dataset.copy;
+  if (!id) return;
+  try {
+    await navigator.clipboard.writeText($(id).textContent);
+    const old = e.target.textContent; e.target.textContent = 'Copied'; setTimeout(() => (e.target.textContent = old), 1500);
+  } catch (_) { e.target.textContent = 'Select and copy it by hand'; }
+});
 
 poll();
 setInterval(poll, 2000);

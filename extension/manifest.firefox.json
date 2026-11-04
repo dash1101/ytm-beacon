@@ -29,7 +29,7 @@
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["scripting"],
+  "permissions": ["scripting", "storage"],
   "host_permissions": ["http://127.0.0.1/*", "https://music.youtube.com/*"],
   "browser_specific_settings": {
     "gecko": {

@@ -7,6 +7,28 @@ const ext = globalThis.browser ?? globalThis.chrome;
 const PORTS = [41713, 41714, 41715, 41716, 41717];
 let preferred = PORTS[0];
 
+// Identifies this copy of the extension's code. Filled in when the app unpacks
+// the extension; it stays a placeholder when run straight from the source tree.
+const BUILD = '__BUILD__';
+const PACKAGED = !BUILD.startsWith('__');
+
+// Updating the app replaces the extension's files on disk, but a browser keeps
+// running the old code until the extension is reloaded. The app tells us which
+// build it ships, so when ours is older we reload ourselves: no clicking on the
+// browser's extensions page. Once per build, so a copy that can't update (for
+// example one installed from a store) never gets stuck in a reload loop.
+async function reloadIfOutdated(appBuild) {
+  if (!PACKAGED || !appBuild || appBuild === BUILD) return;
+  try {
+    const { reloadedFor } = await ext.storage.local.get('reloadedFor');
+    if (reloadedFor === appBuild) return;
+    await ext.storage.local.set({ reloadedFor: appBuild });
+    ext.runtime.reload();
+  } catch (_) {
+    // without storage we cannot guard against loops, so do nothing
+  }
+}
+
 async function post(path, body) {
   const order = [preferred, ...PORTS.filter((p) => p !== preferred)];
   for (const port of order) {
@@ -19,6 +41,11 @@ async function post(path, body) {
       });
       if (res.ok) {
         preferred = port;
+        try {
+          reloadIfOutdated((await res.json()).extensionBuild);
+        } catch (_) {
+          // the reply is only a hint
+        }
         return true;
       }
     } catch (_) {
@@ -47,8 +74,8 @@ ext.runtime.onMessage.addListener((msg, sender) => {
 
 // Browsers only run content scripts in pages loaded after the extension was
 // added, so a YouTube Music tab that was already open would stay silent until
-// reloaded. Start the script in those tabs ourselves. It ignores itself if the
-// manifest already started it.
+// reloaded. Start the scripts in those tabs ourselves. They ignore themselves
+// if the manifest already started them.
 async function injectIntoOpenTabs() {
   if (!ext.scripting || !ext.tabs) return;
   let tabs = [];

@@ -6,59 +6,102 @@ album art, a live progress bar, and a "Listen on YouTube Music" button.
 - **Works on Windows, macOS and Linux**, with Chrome, Brave, Edge, Opera, Vivaldi and Firefox.
 - **One small download, nothing else to install.** No Node, no Python, no Discord login.
 - **Starts by itself** when you log in and **reconnects by itself** when you restart Discord.
+- **Updates with one command**, and the browser extension reloads itself.
 - **Easy to debug:** `ytm-beacon doctor` checks everything and tells you what to fix.
 - **Private:** nothing leaves your computer except the card Discord shows. No accounts, no analytics.
 
-## Install
+## Quick start
 
-Installing takes two steps: the **app** (shares your music with Discord) and the **browser
-extension** (tells the app what's playing). Both are one-time.
+**1. Install the app** (paste into a terminal, or on Windows just download, unzip and double-click):
 
-### 1. The app
+| System | Do this |
+| --- | --- |
+| **Linux / macOS** | `curl -fsSL https://raw.githubusercontent.com/dash1101/ytm-beacon/main/scripts/install.sh \| sh` |
+| **Windows** (PowerShell) | `irm https://raw.githubusercontent.com/dash1101/ytm-beacon/main/scripts/install.ps1 \| iex` |
+| **Windows** (no terminal) | Download `ytm-beacon_windows_amd64.zip` from the [Releases page](https://github.com/dash1101/ytm-beacon/releases/latest), unzip it, double-click `ytm-beacon.exe`. |
 
-**Windows**: download `ytm-beacon_windows_amd64.zip` from the
-[Releases page](https://github.com/dash1101/ytm-beacon/releases/latest), unzip it, and double-click
-`ytm-beacon.exe`. Press Enter when asked. Or, in PowerShell:
+It installs for your user only (no administrator rights), starts YTM Beacon, and sets it to start
+at login.
 
-```powershell
-irm https://raw.githubusercontent.com/dash1101/ytm-beacon/main/scripts/install.ps1 | iex
-```
+**2. Add the browser extension** (one time). A **setup page opens in your browser** with the exact
+steps for *your* browser and the folder to pick, each with a Copy button. It takes three clicks:
 
-**macOS and Linux**: paste this into a terminal:
+1. Open your browser's extensions page (`chrome://extensions`, `brave://extensions`, `edge://extensions`...).
+2. Turn on **Developer mode**.
+3. Click **Load unpacked** and choose the folder shown on the setup page.
+
+Firefox: the setup page shows the Firefox steps (a permanent, signed `.xpi` is on the Releases page).
+
+**3. Play a song** on [music.youtube.com](https://music.youtube.com). Look at your Discord profile.
+The setup box disappears by itself once YouTube Music is detected.
+
+> **You won't see your own button.** Discord shows the "Listen on YouTube Music" button to other
+> people, not to you.
+
+## Updating
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dash1101/ytm-beacon/main/scripts/install.sh | sh
+ytm-beacon update
 ```
 
-(On macOS, prefer this command over downloading in a browser: it avoids Gatekeeper's
-"unidentified developer" warning.)
+It finds the latest release, downloads it, **verifies its SHA-256 checksum**, and installs it. The
+browser extension notices the new version and **reloads itself within seconds**, so there is nothing
+to do in your browser. Use `ytm-beacon update --check` to just see whether a newer version exists.
+It only contacts the network when you run this command.
 
-The installer copies the app to a permanent place, unpacks the extension, sets the app to start at
-login, and starts it. It needs no administrator rights and changes nothing system-wide.
-Run `ytm-beacon uninstall` to undo all of it.
+You can also re-run the install command from the Quick start; it does the same.
 
-### 2. The browser extension
+## Uninstalling
 
-The installer prints the exact folder; you can print it again any time with `ytm-beacon extension`.
+```bash
+ytm-beacon uninstall
+```
 
-**Chrome, Brave, Edge, Opera, Vivaldi:**
+That stops the app, removes start-at-login and deletes the program and its copy of the extension.
+Your settings are kept in case you come back; add `--purge` to delete those as well:
 
-1. Open `chrome://extensions` (Brave: `brave://extensions`, Edge: `edge://extensions`).
-2. Turn on **Developer mode**.
-3. Click **Load unpacked** and choose the `chrome` folder the installer showed you.
+```bash
+ytm-beacon uninstall --purge
+```
 
-**Firefox:** install `ytm-beacon-firefox.xpi` from the Releases page (permanent, once signed
-releases are published). To just try it, open `about:debugging#/runtime/this-firefox`, click
-**Load Temporary Add-on...** and pick `manifest.json` from the `firefox` folder (Firefox forgets
-temporary add-ons when it restarts).
+Then remove the extension from your browser (this part can only be done in the browser): open the
+extensions page, find **YTM Beacon**, click **Remove**. After that nothing of YTM Beacon is left.
 
-### 3. Play something
+Can't run `ytm-beacon`? Use the one-line uninstallers (they find the program wherever it was installed):
 
-Open [music.youtube.com](https://music.youtube.com), play a song, and look at your Discord
-profile. Click the extension's toolbar icon any time for a quick "is everything connected?" check.
+| System | Do this |
+| --- | --- |
+| **Linux / macOS** | `curl -fsSL https://raw.githubusercontent.com/dash1101/ytm-beacon/main/scripts/uninstall.sh \| sh` |
+| **Windows** (PowerShell) | `irm https://raw.githubusercontent.com/dash1101/ytm-beacon/main/scripts/uninstall.ps1 \| iex` |
 
-> **You won't see your own button.** Discord shows your "Listen on YouTube Music" button to
-> other people, not to you. Ask a friend, or look at your profile from another account.
+<details>
+<summary>Removing everything by hand</summary>
+
+**Linux**
+
+```bash
+systemctl --user disable --now ytm-beacon.service
+rm -f ~/.config/systemd/user/ytm-beacon.service ~/.config/autostart/ytm-beacon.desktop
+rm -rf ~/.local/bin/ytm-beacon ~/.local/share/ytm-beacon ~/.config/ytm-beacon
+```
+
+**macOS**
+
+```bash
+launchctl bootout gui/$(id -u)/dev.ytm-beacon
+rm -f ~/Library/LaunchAgents/dev.ytm-beacon.plist ~/.local/bin/ytm-beacon
+rm -rf "$HOME/Library/Application Support/ytm-beacon"
+```
+
+**Windows** (PowerShell)
+
+```powershell
+Stop-Process -Name ytm-beacon-bg, ytm-beacon -ErrorAction SilentlyContinue
+reg delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v YTMBeacon /f
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\ytm-beacon", "$env:APPDATA\ytm-beacon"
+```
+
+</details>
 
 ## Settings
 
@@ -83,15 +126,17 @@ ytm-beacon doctor
 ```
 
 It checks that the app is running, that Discord is reachable, and that the extension is reporting
-music, and it prints a fix for whatever is wrong.
+music, and it prints a fix for whatever is wrong. The extension's toolbar popup does a similar
+check and says what it sees in your YouTube Music tab.
 
 | What you see | What to do |
 | --- | --- |
 | *"The app is not running"* | Run `ytm-beacon install` (sets it up and starts it). |
 | *"Cannot reach Discord"* | Open the Discord **desktop** app (the website can't do Rich Presence). The app reconnects within seconds. Using Flatpak/Snap Discord? See the [Linux notes](docs/TROUBLESHOOTING.md#linux-flatpak-and-snap-discord). |
-| *"The browser extension has never reported in"* | Make sure the extension is installed and enabled, then reload your YouTube Music tab. |
+| *"The browser extension has never reported in"* | Make sure the extension is installed and enabled, then click its toolbar icon: it says what's wrong in your YouTube Music tab. |
+| *"Nothing is playing yet"* but a song is playing | Another extension (an ad blocker, a YouTube enhancer) may be interfering. YTM Beacon works around the known cases; see the [guide](docs/TROUBLESHOOTING.md#the-extension-isnt-reporting). |
 | Everything is green but nothing shows | In Discord: **User Settings > Activity Privacy**, make sure sharing your activity is on, and that you aren't set to *Invisible*. |
-| The icon in the toolbar shows a red **!** | The extension can't reach the app. Run `ytm-beacon doctor`. |
+| The toolbar icon shows a red **!** | The extension can't reach the app. Run `ytm-beacon doctor`. |
 
 More cases (Firefox, antivirus, ports, wrong progress bar...) are in
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). Still stuck?
@@ -130,21 +175,17 @@ If you build from source or want your own name and images:
 4. Paste the Application ID into the dashboard (Settings), or set it in `config.json`, or set the
    `YTM_BEACON_CLIENT_ID` environment variable.
 
-## Updating and uninstalling
-
-- **Update:** run the install command again. It stops the old version, replaces it and restarts.
-  Then reload the extension on your browser's extensions page.
-- **Uninstall:** `ytm-beacon uninstall` (add `--purge` to also delete settings and logs), then
-  remove the extension from your browser.
-
 ## Privacy and safety
+
+See the full [privacy policy](PRIVACY.md). In short:
 
 - The app listens only on `127.0.0.1`. It refuses requests from websites (it checks the `Origin`
   and `Host` headers), so no web page can read your status or fake what you're listening to.
 - The extension only runs on `music.youtube.com` and only talks to `127.0.0.1`.
 - The song title, artist, album and album art URL go to Discord, because that is the card. Discord's
   servers fetch the artwork themselves.
-- There is no telemetry, update check or network access of any kind besides that.
+- There is no telemetry and no automatic update check. The only time the program uses the internet
+  is when you run `ytm-beacon update`.
 
 ## Contributing
 

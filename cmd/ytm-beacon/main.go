@@ -30,6 +30,7 @@ import (
 	"github.com/dash1101/ytm-beacon/internal/paths"
 	"github.com/dash1101/ytm-beacon/internal/presence"
 	"github.com/dash1101/ytm-beacon/internal/server"
+	"github.com/dash1101/ytm-beacon/internal/updater"
 	"github.com/dash1101/ytm-beacon/internal/version"
 )
 
@@ -40,12 +41,14 @@ Usage: ytm-beacon <command>
 Commands:
   install      Set everything up: copy the program, unpack the browser
                extension, start at login, and start now
+  update       Download and install the latest version
+               (add --check to only see whether there is one)
   doctor       Check that everything works and explain what to fix
+  uninstall    Remove everything: stops the app, removes start-at-login and
+               the installed files (add --purge to also delete your settings)
   extension    Show where the browser extension is (and how to add it)
   run          Run in the foreground (what start-at-login does)
   stop         Stop the running app
-  uninstall    Remove start-at-login and the installed files
-               (add --purge to also delete settings and logs)
   version      Print the version
 
 Dashboard and settings: http://127.0.0.1:%d/ (while running)
@@ -69,7 +72,16 @@ func main() {
 	case "run":
 		err = cmdRun(args[1:])
 	case "install":
-		err = installer.Install(os.Stdout, extFS())
+		ifl := flag.NewFlagSet("install", flag.ExitOnError)
+		noOpen := ifl.Bool("no-open", false, "don't open the setup page in the browser")
+		_ = ifl.Parse(args[1:])
+		err = installer.Install(os.Stdout, extFS(), installer.Options{NoOpen: *noOpen})
+	case "update":
+		ufl := flag.NewFlagSet("update", flag.ExitOnError)
+		check := ufl.Bool("check", false, "only report whether a newer version exists")
+		force := ufl.Bool("force", false, "reinstall even if already up to date")
+		_ = ufl.Parse(args[1:])
+		err = updater.Run(os.Stdout, updater.Options{Check: *check, Force: *force})
 	case "uninstall":
 		ufl := flag.NewFlagSet("uninstall", flag.ExitOnError)
 		purge := ufl.Bool("purge", false, "also delete settings and logs")
@@ -130,16 +142,22 @@ func interactive() int {
 	if on, _ := autostart.Installed(); !on && isTerminal(os.Stdin) {
 		fmt.Println("YTM Beacon shows what you're playing on YouTube Music in your Discord profile.")
 		fmt.Println("It isn't installed yet.")
-		fmt.Print("\nInstall it now? [Y/n] ")
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(line)); a == "" || a == "y" || a == "yes" {
-			fmt.Println()
-			if err := installer.Install(os.Stdout, extFS()); err != nil {
-				fmt.Fprintln(os.Stderr, "Error:", err)
-				return 1
+		// On Windows the window only exists because the program was
+		// double-clicked, so the intent is clear: just install.
+		if !ownsConsole() {
+			fmt.Print("\nInstall it now? [Y/n] ")
+			line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
+				fmt.Printf(usage, server.Ports[0], version.RepoURL)
+				return 0
 			}
-			return 0
 		}
+		fmt.Println()
+		if err := installer.Install(os.Stdout, extFS(), installer.Options{}); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			return 1
+		}
+		return 0
 	}
 	fmt.Printf(usage, server.Ports[0], version.RepoURL)
 	return 0
@@ -264,8 +282,10 @@ func cmdRun(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	marker, _ := paths.ConnectedMarker()
 	srv := server.New(server.Deps{
 		Config: cfg, Tracker: tracker, Engine: engine, LogPath: logPath, Quit: stop,
+		ExtensionBuild: extension.Build(extFS(), version.Version), ConnectedMarker: marker,
 	}, port)
 	httpSrv := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 5 * time.Second}
 

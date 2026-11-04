@@ -13,11 +13,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/dash1101/ytm-beacon/internal/config"
+	"github.com/dash1101/ytm-beacon/internal/paths"
 	"github.com/dash1101/ytm-beacon/internal/presence"
 	"github.com/dash1101/ytm-beacon/internal/version"
 )
@@ -39,6 +41,12 @@ type Deps struct {
 	Engine  *presence.Engine
 	LogPath string
 	Quit    func() // asks the whole app to shut down
+
+	// ExtensionBuild identifies the extension code this app ships. It is sent
+	// back to the extension, which reloads itself when it is out of date.
+	ExtensionBuild string
+	// ConnectedMarker is a file created the first time an extension reports in.
+	ConnectedMarker string
 }
 
 type Server struct {
@@ -67,11 +75,17 @@ type Status struct {
 	Config         config.Config          `json:"config"`
 	ConfigPath     string                 `json:"configPath"`
 	LogPath        string                 `json:"logPath"`
+	ExtensionBuild string                 `json:"extensionBuild"`
+	// ExtensionDirs are the folders to load into the browser, by flavour.
+	ExtensionDirs map[string]string `json:"extensionDirs"`
 }
 
 type ExtensionStatus struct {
 	LastSeenAgoSec *int64                `json:"lastSeenAgoSec"` // null until an extension has reported in
 	Sources        []presence.SourceInfo `json:"sources"`
+	// EverConnected is true once an extension has reported in, even before this
+	// run of the app. The dashboard shows first-run setup steps until then.
+	EverConnected bool `json:"everConnected"`
 }
 
 func (s *Server) buildStatus() Status {
@@ -93,7 +107,14 @@ func (s *Server) buildStatus() Status {
 		Config:         cfg,
 		ConfigPath:     s.d.Config.Path(),
 		LogPath:        s.d.LogPath,
-		Extension:      ExtensionStatus{Sources: s.d.Tracker.Sources()},
+		Extension:      ExtensionStatus{Sources: s.d.Tracker.Sources(), EverConnected: fileExists(s.d.ConnectedMarker)},
+		ExtensionBuild: s.d.ExtensionBuild,
+		ExtensionDirs:  map[string]string{},
+	}
+	for _, b := range []string{"chrome", "firefox"} {
+		if dir, err := paths.ExtensionDir(b); err == nil {
+			st.ExtensionDirs[b] = dir
+		}
 	}
 	if t, ok := s.d.Tracker.LastExtensionSeen(); ok {
 		ago := int64(time.Since(t).Seconds())
@@ -212,10 +233,29 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.d.Tracker.Put(u) {
-		slog.Info("browser extension connected", "browser", u.Agent, "track", u.Title, "state", u.State)
+		slog.Info("browser extension connected", "browser", u.Agent) // no song details: the log may be shared in bug reports
+		s.markConnected()
 	}
 	s.d.Engine.Wake()
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "extensionBuild": s.d.ExtensionBuild})
+}
+
+func fileExists(p string) bool {
+	if p == "" {
+		return false
+	}
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// markConnected remembers that setup is done, for the dashboard and installer.
+func (s *Server) markConnected() {
+	if s.d.ConnectedMarker == "" || fileExists(s.d.ConnectedMarker) {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(s.d.ConnectedMarker), 0o755); err == nil {
+		_ = os.WriteFile(s.d.ConnectedMarker, nil, 0o644)
+	}
 }
 
 func (s *Server) clear(w http.ResponseWriter, r *http.Request) {

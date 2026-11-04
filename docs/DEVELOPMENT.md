@@ -10,7 +10,8 @@ internal/
   server/              The 127.0.0.1 HTTP API, the security gate, and the dashboard page
   config/              config.json
   autostart/           systemd / launchd / Windows Run key
-  installer/           `install` and `uninstall`
+  installer/           `install` and `uninstall` (first-run setup page, Windows-safe file replacement)
+  updater/             `update`: latest release -> checksum -> run its installer
   extension/           unpacks the embedded browser extension (folder or zip)
   doctor/              `ytm-beacon doctor`
   paths/               where files live on each OS
@@ -76,8 +77,15 @@ If you change files in `extension/`, rebuild the app (they're embedded) and re-r
 1. `content.js` (on music.youtube.com) reads `navigator.mediaSession.metadata` and the `<video>`
    element once a second. It sends a message when the track or play state changes, when the user
    seeks, and every 5 seconds as a heartbeat. YouTube Music's DOM is only used as a fallback.
+   `page.js` runs in the page's own world and copies `navigator.mediaSession.metadata` to an attribute
+   on `<html>`, because some extensions replace `mediaSession` inside the page and the extension's
+   isolated world then sees nothing. `content.js` prefers that copy, then the real object, then the
+   on-screen player (`domMetadata`).
 2. `background.js` forwards the message to `http://127.0.0.1:<port>/v1/update` (ports 41713-41717).
-   It keeps no state because browsers can stop it at any time.
+   It keeps no state because browsers can stop it at any time. The app's reply carries the extension
+   **build id** (a hash of the extension sources, `extension.Build`); when it differs from the build
+   baked into `background.js` (`__BUILD__`), the extension calls `runtime.reload()` once (guarded by
+   `storage.local.reloadedFor`), so updating the app updates an unpacked extension without clicks.
 3. The app's `Tracker` keeps the latest report per tab and picks the one to show (playing beats
    paused, newest wins). Reports expire after 45 s, so closing the browser clears the card.
 4. The `Engine` runs once a second and on every update. It builds the activity, compares it with what
@@ -92,7 +100,8 @@ If you change files in `extension/`, rebuild the app (they're embedded) and re-r
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` runs the tests, runs `scripts/build-release.sh`, and attaches to the
+Users update with `ytm-beacon update` (see `internal/updater`) and remove it with `ytm-beacon uninstall`
+or `scripts/uninstall.sh|ps1`. `.github/workflows/release.yml` runs the tests, runs `scripts/build-release.sh`, and attaches to the
 GitHub release: one archive per OS/arch, the two extension zips, `checksums.txt`, and (if the AMO
 secrets exist) the signed Firefox `.xpi`. The installers in `scripts/` download from
 `releases/latest/download`, so asset names must not contain the version.
