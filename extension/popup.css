@@ -41,3 +41,5 @@ li { display: flex; gap: 8px; padding: 4px 0; }
 footer { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
+button { margin-top: 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--link); background: transparent; color: var(--link); font: inherit; cursor: pointer; display: block; }
+button:disabled { opacity: .5; cursor: default; }

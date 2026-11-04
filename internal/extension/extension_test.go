@@ -72,6 +72,7 @@ func TestPackagesAreComplete(t *testing.T) {
 					JS      []string `json:"js"`
 					Matches []string `json:"matches"`
 				} `json:"content_scripts"`
+				Permissions     []string `json:"permissions"`
 				HostPermissions []string `json:"host_permissions"`
 			}
 			if err := json.Unmarshal(raw, &m); err != nil {
@@ -80,8 +81,13 @@ func TestPackagesAreComplete(t *testing.T) {
 			if m.ManifestVersion != 3 || m.Version != "1.2.3" {
 				t.Errorf("manifest_version=%d version=%q", m.ManifestVersion, m.Version)
 			}
-			if len(m.HostPermissions) != 1 || m.HostPermissions[0] != "http://127.0.0.1/*" {
-				t.Errorf("host permissions = %v (should only be the local app)", m.HostPermissions)
+			// Nothing beyond the local app, the one site we read, and the API that
+			// starts our script in tabs that were already open.
+			if len(m.HostPermissions) != 2 || m.HostPermissions[0] != "http://127.0.0.1/*" || m.HostPermissions[1] != "https://music.youtube.com/*" {
+				t.Errorf("host permissions = %v (should only be the local app and music.youtube.com)", m.HostPermissions)
+			}
+			if len(m.Permissions) != 1 || m.Permissions[0] != "scripting" {
+				t.Errorf("permissions = %v (should only be scripting)", m.Permissions)
 			}
 
 			need := []string{m.Action.Popup}

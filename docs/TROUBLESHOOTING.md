@@ -77,8 +77,10 @@ If you run the *browser* as a Flatpak/Snap, that's fine: the extension only need
 
 1. Is the extension installed and **enabled** on your browser's extensions page? (Chrome-family
    browsers can disable "unpacked" extensions after a browser update: check for a *Re-enable* prompt.)
-2. **Reload the YouTube Music tab.** Tabs that were open before the extension was installed or
-   updated need a refresh.
+2. **Click the extension's toolbar icon.** It checks your YouTube Music tab and says what is wrong:
+   no tab open, the extension isn't running in the tab (there is a **Reload the tab** button), an ad
+   is playing, or nothing is loaded yet. The extension normally starts itself in tabs that were already
+   open, but a tab that your browser has put to sleep may need a reload.
 3. A red **!** on the toolbar icon means the extension can't reach the app. Run `doctor`; the app is
    probably not running.
 4. Ad blockers or privacy extensions that block requests to `127.0.0.1` can interfere. Try with them

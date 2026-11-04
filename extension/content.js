@@ -2,10 +2,24 @@
 // background script, which forwards it to the YTM Beacon app on this computer.
 (() => {
   'use strict';
-  if (window.__ytmBeaconLoaded) return;
-  window.__ytmBeaconLoaded = true;
 
   const ext = globalThis.browser ?? globalThis.chrome;
+  const alive = () => {
+    try {
+      return !!(ext.runtime && ext.runtime.id);
+    } catch (_) {
+      return false;
+    }
+  };
+
+  // This file can be loaded twice: by the manifest, and again by the background
+  // script for tabs that were already open when the extension was added. Only
+  // one copy may run. A copy left behind by an extension reload is dead (its
+  // runtime is gone), so it gets replaced.
+  const prev = window.__ytmBeacon;
+  if (prev && prev.alive()) return;
+  if (prev) prev.stop();
+
   const SOURCE =
     typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : String(Math.random()).slice(2);
   const TICK_MS = 1000;
@@ -17,6 +31,8 @@
   let sticky = { key: '', videoId: '' };
   let timer = null;
 
+  window.__ytmBeacon = { alive, stop: () => clearInterval(timer) };
+
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
   function browserName() {
@@ -27,6 +43,16 @@
     if (/OPR\//.test(ua)) return 'Opera';
     if (/Chrome\//.test(ua)) return 'Chrome';
     return 'Browser';
+  }
+
+  // The main player's <video>. Signed-in pages can contain other <video>
+  // elements (hover previews), so don't just take the first one.
+  function mainVideo() {
+    return (
+      document.querySelector('#movie_player video') ||
+      document.querySelector('video.html5-main-video') ||
+      document.querySelector('video')
+    );
   }
 
   function largestArtwork(list) {
@@ -95,12 +121,21 @@
     return id;
   }
 
-  function snapshot() {
-    const video = document.querySelector('video');
-    if (!video) return null;
-    if (document.querySelector('.ad-showing')) return null;
+  // Why there is (or isn't) something to report right now. The toolbar popup
+  // asks this to explain problems in plain words.
+  function inspect() {
+    const video = mainVideo();
+    if (!video) return { reason: 'no-player' };
+    if (document.querySelector('.ad-showing')) return { reason: 'ad' };
     const meta = readMetadata();
-    if (!meta.title) return null;
+    if (!meta.title) return { reason: 'nothing-loaded' };
+    return { reason: 'ok', video, meta };
+  }
+
+  function snapshot() {
+    const seen = inspect();
+    if (seen.reason !== 'ok') return null;
+    const { video, meta } = seen;
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     return {
       ...meta,
@@ -113,11 +148,12 @@
 
   function send(msg) {
     try {
-      if (!ext.runtime || !ext.runtime.id) throw new Error('extension context gone');
+      if (!alive()) throw new Error('extension context gone');
       const p = ext.runtime.sendMessage(msg);
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (_) {
-      // The extension was reloaded or updated; this page needs a refresh to reconnect.
+      // The extension was reloaded or updated; the background script will
+      // start a fresh copy of this file in the tab.
       clearInterval(timer);
     }
   }
@@ -147,6 +183,19 @@
       lastSentAt = now;
     }
   }
+
+  // The popup asks "are you running here, and what do you see?"
+  ext.runtime.onMessage.addListener((msg, _sender, reply) => {
+    if (!msg || msg.type !== 'probe') return;
+    const seen = inspect();
+    const out = { loaded: true, reason: seen.reason };
+    if (seen.reason === 'ok') {
+      out.title = seen.meta.title;
+      out.artist = seen.meta.artist;
+      out.state = seen.video.paused ? 'paused' : 'playing';
+    }
+    reply(out);
+  });
 
   window.addEventListener('pagehide', () => send({ type: 'clear', source: SOURCE }));
   timer = setInterval(tick, TICK_MS);

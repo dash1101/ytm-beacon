@@ -23,5 +23,6 @@
       "run_at": "document_idle"
     }
   ],
-  "host_permissions": ["http://127.0.0.1/*"]
+  "permissions": ["scripting"],
+  "host_permissions": ["http://127.0.0.1/*", "https://music.youtube.com/*"]
 }

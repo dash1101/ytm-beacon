@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -210,7 +211,9 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reserved source name"})
 		return
 	}
-	s.d.Tracker.Put(u)
+	if s.d.Tracker.Put(u) {
+		slog.Info("browser extension connected", "browser", u.Agent, "track", u.Title, "state", u.State)
+	}
 	s.d.Engine.Wake()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

@@ -126,8 +126,9 @@ func NewTrackerWithClock(now func() time.Time) *Tracker {
 	return &Tracker{now: now, m: map[string]*entry{}}
 }
 
-// Put records an update that has already been sanitized.
-func (t *Tracker) Put(u Update) {
+// Put records an update that has already been sanitized. It reports whether
+// this is the first time that source has been heard from.
+func (t *Tracker) Put(u Update) (isNew bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := t.now()
@@ -141,6 +142,7 @@ func (t *Tracker) Put(u Update) {
 	if e == nil {
 		e = &entry{}
 		t.m[u.Source] = e
+		isNew = true
 	}
 	if u.State == StatePaused {
 		// Keep the original pause time across repeated "still paused" reports.
@@ -151,6 +153,7 @@ func (t *Tracker) Put(u Update) {
 		e.pausedSince = time.Time{}
 	}
 	e.u, e.at, e.expires = u, now, now.Add(ttl)
+	return isNew
 }
 
 func (t *Tracker) Clear(source string) {
