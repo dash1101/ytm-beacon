@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "111",
   "name": "YTM Beacon",
   "version": "__VERSION__",
   "description": "Shows what you're playing on YouTube Music as your Discord status. Needs the YTM Beacon app running on this computer.",

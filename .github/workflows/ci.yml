@@ -49,8 +49,9 @@ jobs:
         run: for f in extension/*.js; do node --check "$f"; done
       - name: Build the extension folders
         run: go run ./cmd/ytm-beacon extension --out build-ext
-      - name: web-ext lint (advisory)
-        continue-on-error: true
-        run: |
-          npx --yes web-ext@8 lint --source-dir build-ext/firefox
-          npx --yes web-ext@8 lint --source-dir build-ext/chrome
+      # Mozilla's validator, for the Firefox package only (it rejects Chrome's
+      # service_worker key by design). Zero errors is what add-on review expects.
+      - name: web-ext lint (Firefox package)
+        run: npx --yes web-ext@8 lint --source-dir build-ext/firefox --warnings-as-errors
+      - name: Chrome manifest is valid JSON
+        run: python3 -c "import json; m=json.load(open('build-ext/chrome/manifest.json')); assert m['manifest_version']==3; print('ok', m['version'])"
