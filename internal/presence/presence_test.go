@@ -282,8 +282,11 @@ func TestTestSourceDoesNotCountAsExtension(t *testing.T) {
 // ---- Engine --------------------------------------------------------------------
 
 func TestEngineNoClientID(t *testing.T) {
-	cfg := config.Default() // no client id
+	cfg := config.Default() // no client id of its own
 	t.Setenv("YTM_BEACON_CLIENT_ID", "")
+	old := config.DefaultClientID
+	config.DefaultClientID = "" // and no built-in default either
+	t.Cleanup(func() { config.DefaultClientID = old })
 	h := newHarness(cfg)
 	h.step()
 	if h.dials != 0 || h.eng.Snapshot().Discord.State != StateNoClientID {

@@ -16,7 +16,7 @@ import (
 // DefaultClientID is the Discord application the released builds use. It is
 // public information (not a secret). Users can override it in config.json or
 // with the YTM_BEACON_CLIENT_ID environment variable.
-var DefaultClientID = ""
+var DefaultClientID = "1567329407901634670"
 
 // Status display choices decide what Discord shows next to your name in the
 // member list: "Listening to <app name>", <artist> or <song title>.
