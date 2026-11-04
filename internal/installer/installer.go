@@ -124,6 +124,14 @@ func Install(out io.Writer, extSrc fs.FS, opt Options) error {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+	// The app answers before its first try at reaching Discord has finished.
+	// Give it a moment, so we never claim Discord is closed when it isn't.
+	for i := 0; st != nil && st.Discord.State == presence.StateConnecting && i < 16; i++ {
+		time.Sleep(250 * time.Millisecond)
+		if s, err := server.FetchStatus(); err == nil {
+			st = s
+		}
+	}
 	if st == nil {
 		fmt.Fprintln(out, "  !!  It did not start. Run `ytm-beacon doctor` to see why.")
 	} else {
@@ -133,6 +141,8 @@ func Install(out io.Writer, extSrc fs.FS, opt Options) error {
 			fmt.Fprintf(out, "  OK  Connected to Discord as %s\n", st.Discord.User)
 		case presence.StateNoClientID:
 			fmt.Fprintf(out, "  !!  No Discord application ID is set. Open http://127.0.0.1:%d/ to add one.\n", st.Port)
+		case presence.StateConnecting:
+			fmt.Fprintln(out, "  --  Still connecting to Discord. Run `ytm-beacon doctor` in a moment if it doesn't show up.")
 		default:
 			fmt.Fprintln(out, "  --  Discord isn't open yet. It connects by itself when you open the Discord app.")
 		}
