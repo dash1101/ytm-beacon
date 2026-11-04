@@ -78,22 +78,82 @@
     return url;
   }
 
+  // What page.js (running inside the page) saw in navigator.mediaSession, or
+  // null if it isn't running or nothing is set.
+  function pageMetadata() {
+    try {
+      const raw = document.documentElement.getAttribute('data-ytm-beacon-meta');
+      const m = raw ? JSON.parse(raw) : null;
+      return m && typeof m === 'object' && m.title ? m : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function nativeMetadata() {
+    try {
+      const md = navigator.mediaSession && navigator.mediaSession.metadata;
+      return md && md.title ? md : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // "Artist • Album • 2023" -> artist and album. Videos have "Channel • 1.8B views
+  // • 19M likes", which has no album.
+  function splitByline(text) {
+    const parts = clean(text).split(' • ').filter(Boolean);
+    const isStat = (s) => /^\d{4}$/.test(s) || /\b(views|likes|plays|subscribers)\b/i.test(s);
+    return { artist: parts[0] || '', album: parts[1] && !isStat(parts[1]) ? parts[1] : '' };
+  }
+
+  // Last resort, when the page's media session has nothing: read the player on
+  // screen. YouTube Music has used different layouts, so try each in turn.
+  function domMetadata() {
+    const text = (el) => clean(el && el.textContent);
+    // Current layout: mini player at the bottom.
+    const info = document.querySelector('ytmusic-track-info');
+    if (info) {
+      const title = text(info.querySelector('.ytmusicTrackInfoTitle'));
+      if (title) {
+        const items = Array.from(info.querySelectorAll('.ytmusicTrackInfoBylineItem')).map(text).filter(Boolean);
+        const byline = items.length ? items.join(' • ') : text(info.querySelector('.ytmusicTrackInfoByline'));
+        return { title, ...splitByline(byline) };
+      }
+    }
+    // Earlier layout: the player bar.
+    for (const bar of document.querySelectorAll('ytmusic-player-bar')) {
+      const title = text(bar.querySelector('.title'));
+      if (title) return { title, ...splitByline(text(bar.querySelector('.byline'))) };
+    }
+    // The queue marks the playing row.
+    const row = document.querySelector('ytmusic-player-queue-item[selected]');
+    const rowTitle = text(row && row.querySelector('.song-title'));
+    if (rowTitle) return { title: rowTitle, ...splitByline(text(row.querySelector('.byline'))) };
+    // The video's own title overlay, then the tab title.
+    const overlay = text(document.querySelector('#movie_player .ytp-title-link'));
+    if (overlay) return { title: overlay, artist: '', album: '' };
+    const tabTitle = clean(document.title.replace(/\s*\|\s*YouTube Music$/, ''));
+    if (tabTitle && tabTitle !== 'YouTube Music') return { title: tabTitle, artist: '', album: '' };
+    return null;
+  }
+
   function readMetadata() {
-    const md = navigator.mediaSession && navigator.mediaSession.metadata;
+    // Order matters: the in-page copy is what the page really set, even when
+    // another extension has replaced navigator.mediaSession.
+    const md = pageMetadata() || nativeMetadata();
     let title = clean(md && md.title);
     let artist = clean(md && md.artist);
     let album = clean(md && md.album);
     const artwork = md ? largestArtwork(md.artwork) : '';
 
     if (!title) {
-      // Fallback: read the player bar at the bottom of the page.
-      const bar = document.querySelector('ytmusic-player-bar');
-      const titleEl = bar && bar.querySelector('.title');
-      const bylineEl = bar && bar.querySelector('.byline');
-      title = clean(titleEl && titleEl.textContent);
-      const parts = clean(bylineEl && bylineEl.textContent).split(' • ');
-      artist = artist || parts[0] || '';
-      album = album || parts[1] || '';
+      const dom = domMetadata();
+      if (dom) {
+        title = dom.title;
+        artist = artist || dom.artist;
+        album = album || dom.album;
+      }
     }
     artist = artist.replace(/ - Topic$/, '');
     return { title, artist, album, artwork: upscaleArtwork(artwork) };
@@ -188,7 +248,14 @@
   ext.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (!msg || msg.type !== 'probe') return;
     const seen = inspect();
-    const out = { loaded: true, reason: seen.reason };
+    // What each source of song info says, to make problems easy to report.
+    const out = {
+      loaded: true,
+      reason: seen.reason,
+      pageScript: document.documentElement.hasAttribute('data-ytm-beacon-meta'),
+      pageMetadata: !!pageMetadata(),
+      nativeMetadata: !!nativeMetadata(),
+    };
     if (seen.reason === 'ok') {
       out.title = seen.meta.title;
       out.artist = seen.meta.artist;

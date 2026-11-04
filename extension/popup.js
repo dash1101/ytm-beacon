@@ -114,7 +114,8 @@ async function musicRow(heardRecently) {
     case 'ad':
       return row('warn', 'An ad is playing', 'Nothing is shown on Discord during ads.');
     case 'nothing-loaded':
-      return row('warn', 'Nothing is playing yet', 'Play a song in the YouTube Music tab.');
+      return row('warn', 'Nothing is playing yet', 'Play a song in the YouTube Music tab. ' +
+        `(page script ${p.pageScript ? 'on' : 'off'}, in-page song ${p.pageMetadata ? 'found' : 'none'}, browser song ${p.nativeMetadata ? 'found' : 'none'})`);
     default:
       return row('warn', "YouTube Music's player isn't ready", 'Wait a moment, or reload the tab.');
   }

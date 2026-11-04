@@ -19,6 +19,12 @@
   "content_scripts": [
     {
       "matches": ["https://music.youtube.com/*"],
+      "js": ["page.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://music.youtube.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

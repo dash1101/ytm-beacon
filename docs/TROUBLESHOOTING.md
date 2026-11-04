@@ -83,8 +83,14 @@ If you run the *browser* as a Flatpak/Snap, that's fine: the extension only need
    open, but a tab that your browser has put to sleep may need a reload.
 3. A red **!** on the toolbar icon means the extension can't reach the app. Run `doctor`; the app is
    probably not running.
-4. Ad blockers or privacy extensions that block requests to `127.0.0.1` can interfere. Try with them
-   disabled for `music.youtube.com`.
+4. Ad blockers and enhancer extensions can interfere in two ways:
+   - Some replace `navigator.mediaSession` inside the page, so YouTube Music's song info never reaches
+     the browser's real media session. YTM Beacon works around this by also reading the song from inside
+     the page, and as a last resort from the on-screen player. If the popup still says *"Nothing is
+     playing yet"* while a song plays, it lists what each source saw (`page script`, `in-page song`,
+     `browser song`). Please include that line in your bug report.
+   - Blocking requests to `127.0.0.1` stops the extension from reaching the app. Try with them
+     disabled for `music.youtube.com`.
 5. If your browser asks to *"connect to devices on your local network"*, choose **Allow**. That is the
    extension talking to the app on your own computer.
 

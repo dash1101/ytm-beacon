@@ -59,6 +59,7 @@ async function injectIntoOpenTabs() {
   }
   for (const tab of tabs) {
     try {
+      await ext.scripting.executeScript({ target: { tabId: tab.id }, files: ['page.js'], world: 'MAIN' });
       await ext.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
     } catch (_) {
       // discarded or not-yet-loaded tab: it gets the script when it loads
