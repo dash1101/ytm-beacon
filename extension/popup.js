@@ -89,6 +89,12 @@ async function renderPower(port, status) {
   box.append(what, ...buttons);
 }
 
+// Release builds are stamped with the tag ("v0.1.2"); a dev build says "dev".
+function versionLabel(v) {
+  v = String(v || '');
+  return /^v?\d/i.test(v) ? 'v' + v.replace(/^v/i, '') : v;
+}
+
 function row(kind, text, detail, action) {
   const li = document.createElement('li');
   li.className = kind;
@@ -208,7 +214,7 @@ async function render() {
   }
 
   const { port, status } = found;
-  document.getElementById('version').textContent = `v${status.version}`;
+  document.getElementById('version').textContent = versionLabel(status.version);
   document.getElementById('dashboard').href = `http://127.0.0.1:${port}/`;
   await renderPower(port, status);
 

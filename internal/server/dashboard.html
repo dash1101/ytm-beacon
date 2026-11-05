@@ -203,6 +203,12 @@ const $ = (id) => document.getElementById(id);
 let status = null;
 let formLoaded = false;
 
+// Release builds are stamped with the tag ("v0.1.2"); a dev build says "dev".
+function versionLabel(v) {
+  v = String(v || '');
+  return /^v?\d/i.test(v) ? 'v' + v.replace(/^v/i, '') : v;
+}
+
 function row(kind, text, detail) {
   const li = document.createElement('li');
   li.className = kind;
@@ -218,7 +224,7 @@ function render(s) {
   status = s;
   renderSetup(s);
   renderPower(s);
-  $('ver').textContent = 'v' + s.version;
+  $('ver').textContent = versionLabel(s.version);
   const ul = $('checks'); ul.textContent = '';
   ul.append(row('ok', 'YTM Beacon is running', `Port ${s.port}, up ${Math.round(s.uptimeSec / 60)} min`));
 
