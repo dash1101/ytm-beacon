@@ -673,3 +673,45 @@ func TestSnapshotExplainsSettingsHiding(t *testing.T) {
 		t.Errorf("want %q, got %q", HiddenPaused, got)
 	}
 }
+
+// A paused tab in the background is slowed by the browser to about one report
+// a minute. Its card must stay put between reports, not flicker off and on.
+func TestThrottledBackgroundTabDoesNotFlicker(t *testing.T) {
+	t.Setenv("YTM_BEACON_CLIENT_ID", "")
+	cfg := testConfig()
+	cfg.PauseTimeoutMinutes = 30
+	h := newHarness(cfg)
+	h.step()
+
+	h.tr.Put(song("a", "Paused Song", StatePaused, 40, 200))
+	h.step()
+	if h.conn().last() == nil {
+		t.Fatal("the paused card should be showing")
+	}
+	n := h.conn().count()
+
+	for i := 0; i < 3; i++ { // three minutes of one report per minute, with a little jitter
+		for s := 0; s < 62; s += 2 {
+			h.clk.Advance(2 * time.Second)
+			h.step()
+		}
+		if h.conn().count() != n || h.conn().last() == nil {
+			t.Fatalf("minute %d: the card was cleared between reports (%d sends, was %d)", i+1, h.conn().count(), n)
+		}
+		h.tr.Put(song("a", "Paused Song", StatePaused, 40, 200))
+		h.step()
+	}
+
+	// A tab that really is gone (browser killed) still clears, just not instantly.
+	h.clk.Advance(QuietAfter() + 5*time.Second)
+	h.step()
+	if h.conn().last() != nil {
+		t.Error("a source that stopped reporting for good must still clear the card")
+	}
+}
+
+func TestQuietAfterIsOverOneMinute(t *testing.T) {
+	if QuietAfter() <= 65*time.Second {
+		t.Errorf("a throttled tab reports about every 60s, so %v would flag it as gone", QuietAfter())
+	}
+}

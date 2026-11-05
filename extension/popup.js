@@ -222,7 +222,9 @@ async function render() {
   checks.append(discordRow(status.discord));
 
   const seen = status.extension && status.extension.lastSeenAgoSec;
-  if (seen == null || seen > 20) {
+  // A paused tab in the background only reports about once a minute, so "quiet" is the app's number.
+  const quiet = (status.extension && status.extension.quietAfterSec) || 20;
+  if (seen == null || seen > quiet) {
     checks.append(await musicRow(seen));
   } else {
     checks.append(row('ok', 'Receiving from YouTube Music'));

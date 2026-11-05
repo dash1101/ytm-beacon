@@ -20,8 +20,11 @@ const (
 	TestSource = "test"
 
 	// A source that stops reporting is forgotten after this long (browser
-	// closed, tab crashed...). The extension reports every 5 seconds.
-	sourceTTL = 45 * time.Second
+	// closed, tab crashed...). A tab you're listening to reports every 5
+	// seconds, but browsers slow a background tab that isn't playing sound
+	// (a paused song) down to about once a minute, so this must be well over
+	// 60 seconds or such a tab's card would flicker off and on.
+	sourceTTL = 90 * time.Second
 	testTTL   = 30 * time.Second
 )
 
@@ -191,6 +194,10 @@ func (t *Tracker) Select() (Selected, bool) {
 	}
 	return Selected{Update: best.u, ReceivedAt: best.at, PausedSince: best.pausedSince}, true
 }
+
+// QuietAfter is how long without any report before an extension counts as
+// gone quiet (the same as how long a source is remembered).
+func QuietAfter() time.Duration { return sourceTTL }
 
 // LastExtensionSeen is when any browser extension last reported in.
 func (t *Tracker) LastExtensionSeen() (time.Time, bool) {

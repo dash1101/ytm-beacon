@@ -96,6 +96,9 @@ type ExtensionStatus struct {
 	// EverConnected is true once an extension has reported in, even before this
 	// run of the app. The dashboard shows first-run setup steps until then.
 	EverConnected bool `json:"everConnected"`
+	// QuietAfterSec is how long without a report counts as "went quiet". A paused
+	// tab in the background only reports about once a minute, so it is well over 60.
+	QuietAfterSec int64 `json:"quietAfterSec"`
 }
 
 func (s *Server) buildStatus() Status {
@@ -120,7 +123,10 @@ func (s *Server) buildStatus() Status {
 		Config:         cfg,
 		ConfigPath:     s.d.Config.Path(),
 		LogPath:        s.d.LogPath,
-		Extension:      ExtensionStatus{Sources: s.d.Tracker.Sources(), EverConnected: fileExists(s.d.ConnectedMarker)},
+		Extension: ExtensionStatus{
+			Sources: s.d.Tracker.Sources(), EverConnected: fileExists(s.d.ConnectedMarker),
+			QuietAfterSec: int64(presence.QuietAfter() / time.Second),
+		},
 		ExtensionBuild: s.d.ExtensionBuild,
 		ExtensionDirs:  map[string]string{},
 	}

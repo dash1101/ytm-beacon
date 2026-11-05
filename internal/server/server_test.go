@@ -265,3 +265,17 @@ func TestConfigPostKeepsUntouchedSettings(t *testing.T) {
 		t.Errorf("partial save wrong: %+v", got)
 	}
 }
+
+func TestStatusSaysWhenTheExtensionCountsAsQuiet(t *testing.T) {
+	ts, _ := newTestServer(t)
+	var st Status
+	resp := do(t, ts, "GET", "/v1/status", "", nil)
+	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil {
+		t.Fatal(err)
+	}
+	// The dashboard, popup and doctor use this instead of a number of their own,
+	// so a paused tab that reports once a minute is not flagged as gone.
+	if st.Extension.QuietAfterSec <= 65 {
+		t.Errorf("quietAfterSec = %d, want well over a minute", st.Extension.QuietAfterSec)
+	}
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A paused song in a background tab no longer flickers on and off in Discord. Browsers slow such a tab
+  to about one report a minute, and the app forgot it after 45 seconds; it now waits 90. The
+  dashboard, popup and `doctor` use the same number for "extension went quiet" instead of 20 seconds.
+- The dashboard and popup show the version as `v0.1.2`, not `vv0.1.2`.
+
 ## 0.1.2
 
 Stop showing, and more settings.

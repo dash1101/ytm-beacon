@@ -235,8 +235,9 @@ function render(s) {
   if (d.state === 'connected' && d.lastError) ul.append(row('warn', 'Discord had a problem with the last update', d.lastError));
 
   const seen = s.extension.lastSeenAgoSec;
+  const quiet = s.extension.quietAfterSec || 20; // a paused background tab only reports about once a minute
   if (seen == null) ul.append(row('warn', 'No music detected yet', 'Install the browser extension, open music.youtube.com and play a song.'));
-  else if (seen > 20) ul.append(row('warn', 'Browser extension went quiet', `Last heard ${seen}s ago. Reload your YouTube Music tab.`));
+  else if (seen > quiet) ul.append(row('warn', 'Browser extension went quiet', `Last heard ${seen}s ago. Reload your YouTube Music tab.`));
   else ul.append(row('ok', 'Receiving from the browser extension', s.extension.sources.map(x => x.agent || 'browser').join(', ')));
 
   if (s.presenceActive) ul.append(row('ok', 'Visible on your Discord profile', s.config.privateMode ? 'Private mode is on: it only says you are listening to music.' : ''));
