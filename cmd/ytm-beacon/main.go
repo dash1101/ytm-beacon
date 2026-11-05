@@ -43,6 +43,9 @@ Commands:
                extension, start at login, and start now
   update       Download and install the latest version
                (add --check to only see whether there is one)
+  hide [time]  Stop showing on Discord, until you run "show" or for a while
+               (examples: hide, hide 1h, hide 30m)
+  show         Show on Discord again
   doctor       Check that everything works and explain what to fix
   uninstall    Remove everything: stops the app, removes start-at-login and
                the installed files (add --purge to also delete your settings)
@@ -93,6 +96,10 @@ func main() {
 		} else if err = server.Quit(); err == nil {
 			fmt.Println("Stopped.")
 		}
+	case "hide":
+		err = cmdHide(args[1:])
+	case "show":
+		err = cmdShow()
 	case "doctor":
 		os.Exit(finish(doctor.Run(os.Stdout)))
 	case "extension":

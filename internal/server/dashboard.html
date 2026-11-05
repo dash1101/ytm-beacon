@@ -52,12 +52,29 @@
   ol.steps li { margin: 8px 0; }
   .welcome { border-color: var(--accent); }
   .welcome h2 { color: var(--accent); }
+  .power { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-color: var(--ok); }
+  .power.off { border-color: var(--warn); }
+  .power .what { flex: 1 1 260px; min-width: 0; }
+  .power .what b { font-size: 16px; }
+  .power .actions { margin: 0; }
+  h3 { font-size: 13px; margin: 18px 0 4px; color: var(--muted); font-weight: 600; }
+  h3:first-of-type { margin-top: 0; }
+  textarea { width: 100%; min-height: 76px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
+  kbd { background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 12px; }
 </style>
 </head>
 <body>
 <main>
   <h1>YTM Beacon</h1>
   <p class="sub">Shows what you're playing on YouTube Music in your Discord profile.</p>
+
+  <section class="card power" id="powerCard">
+    <div class="what">
+      <b id="powerTitle">…</b>
+      <p class="hint" id="powerSub" style="margin:2px 0 0"></p>
+    </div>
+    <div class="actions" id="powerBtns"></div>
+  </section>
 
   <section class="card">
     <h2>Status</h2>
@@ -107,20 +124,13 @@
 
   <section class="card">
     <h2>Settings</h2>
-    <label class="col">
-      <span>Discord application ID</span>
-      <input type="text" id="clientId" inputmode="numeric" autocomplete="off" placeholder="Leave empty to use the built-in one">
-      <p class="hint">Only needed if you want your own app name. Create one at
-        <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">discord.com/developers/applications</a>
-        and paste its Application ID here.</p>
-    </label>
-    <label class="row"><input type="checkbox" id="showButtons"> Show a “Listen on YouTube Music” button</label>
-    <label class="row"><input type="checkbox" id="showAlbumArt"> Show album art</label>
-    <label class="row"><input type="checkbox" id="showPaused"> Keep showing while paused</label>
-    <label class="col">
-      <span>Hide when paused for longer than (minutes)</span>
-      <input type="number" id="pauseTimeoutMinutes" min="1" max="1440">
-    </label>
+    <p class="hint" id="saveMsg" role="status" style="margin:-6px 0 8px">Changes save by themselves.</p>
+
+    <h3>What your card shows</h3>
+    <label class="row"><input type="checkbox" id="showAlbumArt"> Album art</label>
+    <label class="row"><input type="checkbox" id="showProgress"> Progress bar and time</label>
+    <label class="row"><input type="checkbox" id="showStateIcon"> Small play / pause icon</label>
+    <label class="row"><input type="checkbox" id="showButtons"> A “Listen on YouTube Music” button</label>
     <label class="col">
       <span>Text next to your name in the member list</span>
       <select id="statusDisplay">
@@ -129,8 +139,33 @@
         <option value="state">Listening to the artist name</option>
       </select>
     </label>
-    <div class="actions"><button class="primary" id="save">Save settings</button></div>
-    <div id="msg" role="status"></div>
+
+    <h3>Privacy</h3>
+    <label class="row"><input type="checkbox" id="privateMode"> Private mode: only show “Listening to music” (no song, artist, art or button)</label>
+    <label class="col">
+      <span>Never show songs containing these words</span>
+      <textarea id="hideMatching" placeholder="One per line, for example a song, artist or album name" spellcheck="false"></textarea>
+      <p class="hint">Matches the title, artist and album, ignoring capitals. Those songs simply don't appear on Discord.</p>
+    </label>
+
+    <h3>When you pause</h3>
+    <label class="row"><input type="checkbox" id="showPaused"> Keep showing while paused</label>
+    <label class="col">
+      <span>Hide when paused for longer than (minutes)</span>
+      <input type="number" id="pauseTimeoutMinutes" min="1" max="1440">
+    </label>
+
+    <h3>Advanced</h3>
+    <label class="col">
+      <span>Discord application ID</span>
+      <input type="text" id="clientId" inputmode="numeric" autocomplete="off" placeholder="Leave empty to use the built-in one">
+      <p class="hint">Only needed if you want your own app name. Create one at
+        <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">discord.com/developers/applications</a>
+        and paste its Application ID here.</p>
+    </label>
+    <p class="hint">Quick hide from anywhere: press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> in your browser
+      (change it on the browser's extension shortcuts page), click the extension's toolbar icon, or run
+      <code>ytm-beacon hide</code> / <code>ytm-beacon show</code> in a terminal.</p>
   </section>
 
   <section class="card">
@@ -141,6 +176,7 @@
       <button id="copy">Copy diagnostics</button>
       <button id="logs">Show log</button>
     </div>
+    <div id="msg" role="status"></div>
     <pre id="logBox" hidden style="white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:260px;overflow:auto;background:var(--bg);padding:10px;border-radius:6px;margin:12px 0 0"></pre>
   </section>
 
@@ -181,6 +217,7 @@ function row(kind, text, detail) {
 function render(s) {
   status = s;
   renderSetup(s);
+  renderPower(s);
   $('ver').textContent = 'v' + s.version;
   const ul = $('checks'); ul.textContent = '';
   ul.append(row('ok', 'YTM Beacon is running', `Port ${s.port}, up ${Math.round(s.uptimeSec / 60)} min`));
@@ -196,8 +233,12 @@ function render(s) {
   else if (seen > 20) ul.append(row('warn', 'Browser extension went quiet', `Last heard ${seen}s ago. Reload your YouTube Music tab.`));
   else ul.append(row('ok', 'Receiving from the browser extension', s.extension.sources.map(x => x.agent || 'browser').join(', ')));
 
-  if (s.presenceActive) ul.append(row('ok', 'Visible on your Discord profile'));
-  else if (s.nowPlaying && s.nowPlaying.state === 'paused') ul.append(row('warn', 'Hidden: paused', 'Adjust under Settings.'));
+  if (s.presenceActive) ul.append(row('ok', 'Visible on your Discord profile', s.config.privateMode ? 'Private mode is on: it only says you are listening to music.' : ''));
+  else if (s.hidden === 'off') ul.append(row('warn', 'Hidden: switched off', 'Use the button above to show again.'));
+  else if (s.hidden === 'snoozed') ul.append(row('warn', 'Hidden for now', 'It comes back by itself.'));
+  else if (s.hidden === 'filtered') ul.append(row('warn', 'Hidden: matches your “never show” words', 'Change them under Settings.'));
+  else if (s.hidden === 'paused') ul.append(row('warn', 'Hidden: paused', 'Turn on “Keep showing while paused” under Settings to show it.'));
+  else if (s.hidden === 'paused-timeout') ul.append(row('warn', 'Hidden: paused for a while', 'Adjust the time under Settings.'));
   else ul.append(row('warn', 'Nothing showing on Discord right now'));
 
   const np = s.nowPlaying;
@@ -213,14 +254,69 @@ function render(s) {
   }
 
   if (!formLoaded) {
-    const c = s.config;
-    $('clientId').value = c.clientId || '';
-    $('showButtons').checked = c.showButtons;
-    $('showAlbumArt').checked = c.showAlbumArt;
-    $('showPaused').checked = c.showPaused;
-    $('pauseTimeoutMinutes').value = c.pauseTimeoutMinutes;
-    $('statusDisplay').value = c.statusDisplay;
+    fillForm(s.config);
     formLoaded = true;
+  }
+}
+
+function fillForm(c) {
+  const active = document.activeElement;
+  const set = (id, fn) => { if ($(id) !== active) fn($(id)); };
+  set('clientId', (e) => (e.value = c.clientId || ''));
+  set('showButtons', (e) => (e.checked = c.showButtons));
+  set('showAlbumArt', (e) => (e.checked = c.showAlbumArt));
+  set('showProgress', (e) => (e.checked = c.showProgress));
+  set('showStateIcon', (e) => (e.checked = c.showStateIcon));
+  set('privateMode', (e) => (e.checked = c.privateMode));
+  set('showPaused', (e) => (e.checked = c.showPaused));
+  set('pauseTimeoutMinutes', (e) => (e.value = c.pauseTimeoutMinutes));
+  set('statusDisplay', (e) => (e.value = c.statusDisplay));
+  set('hideMatching', (e) => (e.value = (c.hideMatching || []).join('\n')));
+}
+
+// The big on / off control at the top.
+function fmtMinutes(sec) {
+  const m = Math.max(1, Math.ceil(sec / 60));
+  if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+  const h = Math.floor(m / 60), r = m % 60;
+  return h + (h === 1 ? ' hour' : ' hours') + (r ? ' ' + r + ' min' : '');
+}
+
+async function setVisibility(action, minutes) {
+  try {
+    await fetch('/v1/visibility', { method: 'POST', body: JSON.stringify({ action, minutes: minutes || 0 }) });
+  } catch (e) { /* poll shows the real state */ }
+  poll();
+}
+
+function renderPower(s) {
+  const card = $('powerCard'), box = $('powerBtns');
+  const mode = s.visible ? 'on' : !s.config.enabled ? 'off' : 'snoozed';
+  card.classList.toggle('off', !s.visible);
+  if (mode === 'snoozed') $('powerTitle').textContent = 'Hidden for ' + fmtMinutes(s.snoozeSec) + ' more';
+  // The page refreshes every 2 seconds. Rebuilding the buttons each time would
+  // swallow clicks that land mid-refresh, so only rebuild when the state changes.
+  if (box.dataset.mode === mode) return;
+  box.dataset.mode = mode;
+  box.textContent = '';
+  const btn = (label, action, minutes, primary) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (primary) b.className = 'primary';
+    b.onclick = () => { b.disabled = true; setVisibility(action, minutes); };
+    return b;
+  };
+  if (mode === 'on') {
+    $('powerTitle').textContent = 'Showing on Discord';
+    $('powerSub').textContent = 'Your music appears in your Discord profile while it plays.';
+    box.append(btn('Stop showing', 'hide', 0), btn('Hide for 1 hour', 'hide', 60), btn('Hide for 3 hours', 'hide', 180));
+  } else if (mode === 'off') {
+    $('powerTitle').textContent = 'Switched off';
+    $('powerSub').textContent = 'Nothing is shown on Discord. The app and extension keep running, so turning it on again is instant.';
+    box.append(btn('Show on Discord', 'show', 0, true));
+  } else {
+    $('powerSub').textContent = 'It comes back by itself, or you can bring it back now.';
+    box.append(btn('Show now', 'show', 0, true), btn('Switch off', 'hide', 0));
   }
 }
 
@@ -234,24 +330,50 @@ async function poll() {
   }
 }
 
+const SAVE_HINT = 'Changes save by themselves.';
+let saveMsgTimer = null;
+function saveMsg(text, bad) {
+  const m = $('saveMsg'); m.textContent = text; m.style.color = bad ? 'var(--bad)' : text === SAVE_HINT ? '' : 'var(--ok)';
+  clearTimeout(saveMsgTimer);
+  if (text !== SAVE_HINT && !bad) saveMsgTimer = setTimeout(() => saveMsg(SAVE_HINT), 2000);
+}
 function msg(text, bad) { const m = $('msg'); m.textContent = text; m.style.color = bad ? 'var(--bad)' : 'var(--ok)'; }
 
-$('save').onclick = async () => {
+let saveTimer = null;
+async function saveSettings() {
+  clearTimeout(saveTimer);
   const body = {
     clientId: $('clientId').value.trim(),
     showButtons: $('showButtons').checked,
     showAlbumArt: $('showAlbumArt').checked,
+    showProgress: $('showProgress').checked,
+    showStateIcon: $('showStateIcon').checked,
+    privateMode: $('privateMode').checked,
     showPaused: $('showPaused').checked,
     pauseTimeoutMinutes: parseInt($('pauseTimeoutMinutes').value, 10) || 5,
     statusDisplay: $('statusDisplay').value,
+    hideMatching: $('hideMatching').value.split('\n'),
   };
-  const r = await fetch('/v1/config', { method: 'POST', body: JSON.stringify(body) });
-  const j = await r.json();
-  if (r.ok) { msg('Saved.'); poll(); } else msg(j.error || 'Could not save.', true);
-};
+  try {
+    const r = await fetch('/v1/config', { method: 'POST', body: JSON.stringify(body) });
+    const j = await r.json();
+    if (r.ok) { saveMsg('Saved.'); fillForm(j); poll(); }
+    else saveMsg(j.error || 'Could not save.', true);
+  } catch (e) { saveMsg('Could not reach the app to save.', true); }
+}
+// Checkboxes and menus save at once; text boxes when you leave them or pause typing.
+document.querySelectorAll('input, select, textarea').forEach((el) => el.addEventListener('change', saveSettings));
+for (const id of ['hideMatching', 'pauseTimeoutMinutes']) {
+  $(id).addEventListener('input', () => {
+    clearTimeout(saveTimer);
+    if (id === 'pauseTimeoutMinutes' && !$(id).value) return; // still typing the number
+    saveTimer = setTimeout(saveSettings, 900);
+  });
+}
 
 $('test').onclick = async () => {
   await fetch('/v1/test', { method: 'POST' });
+  if (status && !status.visible) { msg('Showing on Discord is switched off, so nothing will appear. Use the button at the top first.', true); return; }
   msg('Sent a test song. Check your Discord profile (it disappears after 30 seconds).');
   setTimeout(poll, 800);
 };

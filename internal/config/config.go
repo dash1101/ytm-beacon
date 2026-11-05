@@ -26,7 +26,16 @@ const (
 	StatusDetails = "details"
 )
 
+// Limits for the "never show" word list, so a pasted novel can't bloat the file.
+const (
+	maxHideWords   = 50
+	maxHideWordLen = 80
+)
+
 type Config struct {
+	// Enabled is the master switch. When false nothing is shown on Discord (the
+	// app keeps running, so turning it back on is instant).
+	Enabled bool `json:"enabled"`
 	// ClientID is the Discord application ID. Empty means "use the built-in one".
 	ClientID string `json:"clientId"`
 	// ShowButtons adds a "Listen on YouTube Music" button to your profile card.
@@ -39,15 +48,28 @@ type Config struct {
 	ShowAlbumArt bool `json:"showAlbumArt"`
 	// StatusDisplay is one of StatusName, StatusState, StatusDetails.
 	StatusDisplay string `json:"statusDisplay"`
+	// ShowProgress shows the progress bar and elapsed time.
+	ShowProgress bool `json:"showProgress"`
+	// ShowStateIcon adds the small play / pause badge on the album art.
+	ShowStateIcon bool `json:"showStateIcon"`
+	// PrivateMode shows only "Listening to music": no song, artist, art or button.
+	PrivateMode bool `json:"privateMode"`
+	// HideMatching lists words; a song whose title, artist or album contains one
+	// of them (any capitalisation) is never shown.
+	HideMatching []string `json:"hideMatching"`
 }
 
 func Default() Config {
 	return Config{
+		Enabled:             true,
 		ShowButtons:         true,
 		ShowPaused:          true,
 		PauseTimeoutMinutes: 5,
 		ShowAlbumArt:        true,
 		StatusDisplay:       StatusName,
+		ShowProgress:        true,
+		ShowStateIcon:       true,
+		HideMatching:        []string{},
 	}
 }
 
@@ -74,7 +96,30 @@ func (c *Config) Normalize() error {
 	if c.PauseTimeoutMinutes > 24*60 {
 		c.PauseTimeoutMinutes = 24 * 60
 	}
+	c.HideMatching = cleanWords(c.HideMatching)
 	return nil
+}
+
+// cleanWords trims, lower-cases and de-duplicates the word list, dropping
+// blanks and anything beyond the limits. It never returns nil, so the JSON
+// file and the API always show a list.
+func cleanWords(in []string) []string {
+	out := make([]string, 0, len(in))
+	seen := map[string]bool{}
+	for _, w := range in {
+		w = strings.ToLower(strings.TrimSpace(w))
+		if r := []rune(w); len(r) > maxHideWordLen {
+			w = string(r[:maxHideWordLen])
+		}
+		if w == "" || seen[w] {
+			continue
+		}
+		seen[w] = true
+		if out = append(out, w); len(out) == maxHideWords {
+			break
+		}
+	}
+	return out
 }
 
 // EffectiveClientID picks the application ID to use: environment variable,
@@ -124,10 +169,13 @@ func Load(path string) (*Store, error) {
 
 func (s *Store) Path() string { return s.path }
 
+// Get returns a copy of the settings; changing it does not change the Store.
 func (s *Store) Get() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.cfg
+	c := s.cfg
+	c.HideMatching = append([]string{}, c.HideMatching...)
+	return c
 }
 
 // Set validates, stores and saves a new config.

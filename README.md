@@ -8,6 +8,8 @@ album art, a live progress bar, and a "Listen on YouTube Music" button.
 - **Starts by itself** when you log in and **reconnects by itself** when you restart Discord.
 - **Updates with one command**, and the browser extension reloads itself.
 - **Easy to debug:** `ytm-beacon doctor` checks everything and tells you what to fix.
+- **Stop showing in one click:** a switch on the dashboard and the toolbar icon, a keyboard shortcut
+  (`Alt+Shift+M`), or `ytm-beacon hide`. Hide for an hour, or until you turn it back on.
 - **Private:** nothing leaves your computer except the card Discord shows. No accounts, no analytics.
 
 ## Quick start
@@ -105,14 +107,38 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\ytm-beacon", "$env:APPDATA\ytm-be
 
 ## Settings
 
-Open the dashboard at **http://127.0.0.1:41713/** (also linked from the extension popup) to:
+Open the dashboard at **http://127.0.0.1:41713/** (also linked from the extension popup). Changes save
+by themselves.
 
-- show or hide the button and the album art,
-- choose whether to keep the card visible while paused, and for how long,
-- choose what Discord shows next to your name in the member list (*"Listening to YouTube Music"*,
-  the song title, or the artist),
-- send a test song to Discord without opening YouTube Music,
-- copy diagnostics for a bug report.
+**Stop showing (the switch at the top):** hide your music from Discord whenever you like. It's
+also on the extension's toolbar icon, on the keyboard (`Alt+Shift+M` toggles it; change the key on your
+browser's extension shortcuts page) and in a terminal:
+
+```bash
+ytm-beacon hide        # switch off until you run "show"
+ytm-beacon hide 1h     # hide for a while (30m, 2h, 90...); it comes back by itself
+ytm-beacon show        # back on
+```
+
+While it's off the toolbar icon says **off**. The app and extension keep running, so turning it on
+again is instant. "Switch off" is remembered across restarts; a timed hide is not.
+
+**What your card shows:**
+
+- album art, progress bar and time, the small play / pause icon, and the "Listen on YouTube Music" button,
+- what Discord shows next to your name in the member list (*"Listening to YouTube Music"*, the song
+  title, or the artist).
+
+**Privacy:**
+
+- **Private mode** shows only *"Listening to music"*: no song, artist, album art or link.
+- **Never show songs containing these words**: a list (one per line) matched against the title,
+  artist and album, ignoring capitals. Matching songs just don't appear.
+
+**When you pause:** keep the card (marked paused) or hide it, and after how many minutes it goes away.
+
+**Also:** send a test song to Discord without opening YouTube Music, copy diagnostics for a bug
+report, or use your own Discord application ID.
 
 Settings are saved in `config.json` (its location is shown on the dashboard and by
 `ytm-beacon doctor`).
@@ -135,7 +161,7 @@ check and says what it sees in your YouTube Music tab.
 | *"Cannot reach Discord"* | Open the Discord **desktop** app (the website can't do Rich Presence). The app reconnects within seconds. Using Flatpak/Snap Discord? See the [Linux notes](docs/TROUBLESHOOTING.md#linux-flatpak-and-snap-discord). |
 | *"The browser extension has never reported in"* | Make sure the extension is installed and enabled, then click its toolbar icon: it says what's wrong in your YouTube Music tab. |
 | *"Nothing is playing yet"* but a song is playing | Another extension (an ad blocker, a YouTube enhancer) may be interfering. YTM Beacon works around the known cases; see the [guide](docs/TROUBLESHOOTING.md#the-extension-isnt-reporting). |
-| Everything is green but nothing shows | In Discord: **User Settings > Activity Privacy**, make sure sharing your activity is on, and that you aren't set to *Invisible*. |
+| Everything is green but nothing shows | Is the toolbar icon marked **off**? You (or the keyboard shortcut) switched it off: run `ytm-beacon show`. Otherwise, in Discord: **User Settings > Activity Privacy**, make sure sharing your activity is on, and that you aren't set to *Invisible*. |
 | The toolbar icon shows a red **!** | The extension can't reach the app. Run `ytm-beacon doctor`. |
 
 More cases (Firefox, antivirus, ports, wrong progress bar...) are in

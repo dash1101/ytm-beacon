@@ -53,6 +53,11 @@ type Snapshot struct {
 	Discord        DiscordStatus
 	PresenceActive bool
 	NowPlaying     *NowPlaying
+	// Hidden says why the song that is playing is not on Discord (one of the
+	// Hidden* constants), or "" when it is shown or nothing is playing.
+	Hidden string
+	// SnoozeSec is how long a timed hide still has to run (0 = none).
+	SnoozeSec int64
 }
 
 type sentState struct {
@@ -71,9 +76,10 @@ type Engine struct {
 	now  func() time.Time
 	wake chan struct{}
 
-	mu     sync.Mutex // guards status and active
-	status DiscordStatus
-	active bool
+	mu          sync.Mutex // guards status, active and snoozeUntil
+	status      DiscordStatus
+	active      bool
+	snoozeUntil time.Time // a timed hide; not saved, so a restart ends it
 
 	// Only touched from the Run goroutine (or tests calling step directly).
 	conn     discord.Conn
@@ -115,15 +121,58 @@ func (e *Engine) InjectTest() {
 	e.Wake()
 }
 
+// HideFor keeps everything off Discord for d, then shows it again by itself.
+func (e *Engine) HideFor(d time.Duration) {
+	e.mu.Lock()
+	e.snoozeUntil = e.now().Add(d)
+	e.mu.Unlock()
+	e.Wake()
+}
+
+// CancelHide ends a timed hide early.
+func (e *Engine) CancelHide() {
+	e.mu.Lock()
+	e.snoozeUntil = time.Time{}
+	e.mu.Unlock()
+	e.Wake()
+}
+
+// SnoozeLeft is how long a timed hide still has to run (0 = none).
+func (e *Engine) SnoozeLeft() time.Duration { return e.snoozeLeft(e.now()) }
+
+func (e *Engine) snoozeLeft(now time.Time) time.Duration {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if d := e.snoozeUntil.Sub(now); d > 0 && !e.snoozeUntil.IsZero() {
+		return d
+	}
+	return 0
+}
+
+// hiddenFor says why the settings or the user's switches keep this song off
+// Discord ("" = show it).
+func (e *Engine) hiddenFor(cfg config.Config, sel Selected, now time.Time) string {
+	switch {
+	case !cfg.Enabled:
+		return HiddenOff
+	case e.snoozeLeft(now) > 0:
+		return HiddenSnoozed
+	}
+	return hiddenReason(cfg, sel, now)
+}
+
 func (e *Engine) Snapshot() Snapshot {
+	now := e.now()
 	e.mu.Lock()
 	s := Snapshot{Discord: e.status, PresenceActive: e.active}
 	e.mu.Unlock()
+	s.SnoozeSec = int64(e.snoozeLeft(now).Round(time.Second) / time.Second)
 	if sel, ok := e.tr.Select(); ok {
 		s.NowPlaying = &NowPlaying{
 			Title: sel.Title, Artist: sel.Artist, Album: sel.Album, Artwork: sel.Artwork,
 			VideoID: sel.VideoID, State: sel.State, Position: sel.Position, Duration: sel.Duration,
 		}
+		s.Hidden = e.hiddenFor(e.cfg.Get(), sel, now)
 	}
 	return s
 }
@@ -241,7 +290,7 @@ func (e *Engine) step(ctx context.Context) {
 	sel, ok := e.tr.Select()
 	var act *discord.Activity
 	var start int64
-	if ok {
+	if ok && e.hiddenFor(cfg, sel, now) == "" {
 		act, start = BuildActivity(cfg, sel, now, e.basic)
 	}
 	key := activityKey(act)

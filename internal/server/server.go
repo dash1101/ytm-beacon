@@ -34,6 +34,10 @@ var Ports = []int{41713, 41714, 41715, 41716, 41717}
 // ErrAlreadyRunning is returned by Listen when another copy is already up.
 var ErrAlreadyRunning = errors.New("YTM Beacon is already running")
 
+// ErrNotRunning is returned by the helpers that talk to a running app when
+// there is none.
+var ErrNotRunning = errors.New("YTM Beacon is not running")
+
 // Deps are the pieces the server needs.
 type Deps struct {
 	Config  *config.Store
@@ -72,10 +76,16 @@ type Status struct {
 	Extension      ExtensionStatus        `json:"extension"`
 	NowPlaying     *presence.NowPlaying   `json:"nowPlaying"`
 	PresenceActive bool                   `json:"presenceActive"`
-	Config         config.Config          `json:"config"`
-	ConfigPath     string                 `json:"configPath"`
-	LogPath        string                 `json:"logPath"`
-	ExtensionBuild string                 `json:"extensionBuild"`
+	// Visible is false while the switch is off or a timed hide is running.
+	Visible bool `json:"visible"`
+	// SnoozeSec is the time left of a timed hide (0 = none).
+	SnoozeSec int64 `json:"snoozeSec"`
+	// Hidden says why the song that is playing is not on Discord ("" = it is).
+	Hidden         string        `json:"hidden"`
+	Config         config.Config `json:"config"`
+	ConfigPath     string        `json:"configPath"`
+	LogPath        string        `json:"logPath"`
+	ExtensionBuild string        `json:"extensionBuild"`
 	// ExtensionDirs are the folders to load into the browser, by flavour.
 	ExtensionDirs map[string]string `json:"extensionDirs"`
 }
@@ -104,6 +114,9 @@ func (s *Server) buildStatus() Status {
 		Discord:        snap.Discord,
 		NowPlaying:     snap.NowPlaying,
 		PresenceActive: snap.PresenceActive,
+		Visible:        cfg.Enabled && snap.SnoozeSec == 0,
+		SnoozeSec:      snap.SnoozeSec,
+		Hidden:         snap.Hidden,
 		Config:         cfg,
 		ConfigPath:     s.d.Config.Path(),
 		LogPath:        s.d.LogPath,
@@ -132,6 +145,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/clear", s.clear)
 	mux.HandleFunc("GET /v1/config", s.getConfig)
 	mux.HandleFunc("POST /v1/config", s.setConfig)
+	mux.HandleFunc("POST /v1/visibility", s.visibility)
 	mux.HandleFunc("POST /v1/test", s.test)
 	mux.HandleFunc("GET /v1/logs", s.logs)
 	mux.HandleFunc("POST /v1/quit", s.quit)
@@ -237,7 +251,10 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		s.markConnected()
 	}
 	s.d.Engine.Wake()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "extensionBuild": s.d.ExtensionBuild})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "extensionBuild": s.d.ExtensionBuild,
+		"visible": s.visibilityState().Visible, // the extension shows an "off" badge when false
+	})
 }
 
 func fileExists(p string) bool {
@@ -267,7 +284,7 @@ func (s *Server) clear(w http.ResponseWriter, r *http.Request) {
 	}
 	s.d.Tracker.Clear(truncateSource(b.Source))
 	s.d.Engine.Wake()
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "visible": s.visibilityState().Visible})
 }
 
 func truncateSource(s string) string {
@@ -293,6 +310,65 @@ func (s *Server) setConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	s.d.Engine.Wake()
 	writeJSON(w, http.StatusOK, s.d.Config.Get())
+}
+
+// VisibilityState is whether the app is allowed to show things on Discord now.
+type VisibilityState struct {
+	Enabled   bool  `json:"enabled"`   // the master switch
+	SnoozeSec int64 `json:"snoozeSec"` // time left of a timed hide
+	Visible   bool  `json:"visible"`   // switch on and no timed hide
+}
+
+func (s *Server) visibilityState() VisibilityState {
+	enabled := s.d.Config.Get().Enabled
+	left := int64(s.d.Engine.SnoozeLeft().Round(time.Second) / time.Second)
+	return VisibilityState{Enabled: enabled, SnoozeSec: left, Visible: enabled && left == 0}
+}
+
+const maxHideMinutes = 24 * 60
+
+// visibility is the one place that hides and shows the presence, used by the
+// dashboard, the toolbar popup, the keyboard shortcut and the command line.
+//
+//	{"action":"hide"}                 switch off until turned back on
+//	{"action":"hide","minutes":60}    hide for an hour, then come back by itself
+//	{"action":"show"}                 switch on and end any timed hide
+//	{"action":"toggle"}               hide if visible, otherwise show
+func (s *Server) visibility(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Action  string `json:"action"`
+		Minutes int    `json:"minutes"`
+	}
+	if !readJSON(w, r, &b) {
+		return
+	}
+	if b.Action == "toggle" {
+		b.Action, b.Minutes = "show", 0
+		if s.visibilityState().Visible {
+			b.Action = "hide"
+		}
+	}
+	cfg := s.d.Config.Get()
+	switch b.Action {
+	case "hide":
+		if b.Minutes > 0 {
+			s.d.Engine.HideFor(time.Duration(min(b.Minutes, maxHideMinutes)) * time.Minute)
+		} else {
+			cfg.Enabled = false
+		}
+	case "show":
+		cfg.Enabled = true
+		s.d.Engine.CancelHide()
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `action must be "hide", "show" or "toggle"`})
+		return
+	}
+	if err := s.d.Config.Set(cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.d.Engine.Wake()
+	writeJSON(w, http.StatusOK, s.visibilityState())
 }
 
 func (s *Server) test(w http.ResponseWriter, _ *http.Request) {
@@ -400,7 +476,34 @@ func FetchStatus() (*Status, error) {
 			return &st, nil
 		}
 	}
-	return nil, errors.New("YTM Beacon is not running")
+	return nil, ErrNotRunning
+}
+
+// SetVisibility tells a running app to "hide" (minutes > 0: for that long),
+// "show" or "toggle", and returns the resulting state. The error says "not
+// running" when there is no app to ask.
+func SetVisibility(action string, minutes int) (*VisibilityState, error) {
+	st, err := FetchStatus()
+	if err != nil {
+		return nil, err
+	}
+	body, _ := json.Marshal(map[string]any{"action": action, "minutes": minutes})
+	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/v1/visibility", st.Port), "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var out struct {
+		VisibilityState
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(out.Error)
+	}
+	return &out.VisibilityState, nil
 }
 
 // Quit asks a running app to shut down and waits until it has.

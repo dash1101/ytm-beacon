@@ -173,3 +173,95 @@ func TestValidHost(t *testing.T) {
 		}
 	}
 }
+
+func postVisibility(t *testing.T, ts *httptest.Server, body string) (int, VisibilityState) {
+	t.Helper()
+	resp := do(t, ts, "POST", "/v1/visibility", body, map[string]string{"Origin": "chrome-extension://abcdefghijklmnop"})
+	var v VisibilityState
+	_ = json.NewDecoder(resp.Body).Decode(&v)
+	return resp.StatusCode, v
+}
+
+func TestVisibilityHideShowToggle(t *testing.T) {
+	ts, cfg := newTestServer(t)
+
+	if code, v := postVisibility(t, ts, `{"action":"hide"}`); code != 200 || v.Enabled || v.Visible {
+		t.Fatalf("hide: %d %+v", code, v)
+	}
+	if cfg.Get().Enabled {
+		t.Error("hiding must be saved in the settings so it survives a restart")
+	}
+
+	if code, v := postVisibility(t, ts, `{"action":"toggle"}`); code != 200 || !v.Enabled || !v.Visible {
+		t.Fatalf("toggle while hidden must show: %d %+v", code, v)
+	}
+	if code, v := postVisibility(t, ts, `{"action":"toggle"}`); code != 200 || v.Visible {
+		t.Fatalf("toggle while visible must hide: %d %+v", code, v)
+	}
+
+	// A timed hide leaves the saved switch alone.
+	postVisibility(t, ts, `{"action":"show"}`)
+	code, v := postVisibility(t, ts, `{"action":"hide","minutes":60}`)
+	if code != 200 || !v.Enabled || v.Visible || v.SnoozeSec < 59*60 || v.SnoozeSec > 60*60 {
+		t.Fatalf("timed hide: %d %+v", code, v)
+	}
+	if !cfg.Get().Enabled {
+		t.Error("a timed hide is not saved: a restart brings the presence back")
+	}
+	if code, v := postVisibility(t, ts, `{"action":"toggle"}`); code != 200 || !v.Visible || v.SnoozeSec != 0 {
+		t.Fatalf("toggle during a timed hide must show again: %d %+v", code, v)
+	}
+
+	// Absurd lengths are capped at a day.
+	if _, v := postVisibility(t, ts, `{"action":"hide","minutes":99999}`); v.SnoozeSec > 24*60*60 {
+		t.Errorf("not capped: %d", v.SnoozeSec)
+	}
+
+	if code, _ := postVisibility(t, ts, `{"action":"explode"}`); code != http.StatusBadRequest {
+		t.Errorf("unknown action must be rejected, got %d", code)
+	}
+}
+
+func TestVisibilityRefusesWebPages(t *testing.T) {
+	ts, cfg := newTestServer(t)
+	resp := do(t, ts, "POST", "/v1/visibility", `{"action":"hide"}`, map[string]string{"Origin": "https://evil.example"})
+	if resp.StatusCode != http.StatusForbidden || !cfg.Get().Enabled {
+		t.Errorf("another website must not be able to switch the presence: %d", resp.StatusCode)
+	}
+}
+
+func TestStatusAndUpdateReplyShowVisibility(t *testing.T) {
+	ts, _ := newTestServer(t)
+	postVisibility(t, ts, `{"action":"hide"}`)
+
+	resp := do(t, ts, "POST", "/v1/update", goodUpdate, map[string]string{"Content-Type": "text/plain", "Origin": "chrome-extension://abcdefghijklmnop"})
+	var reply struct {
+		Visible *bool `json:"visible"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&reply)
+	if reply.Visible == nil || *reply.Visible {
+		t.Errorf("the extension's reply must say the presence is off (it shows a badge): %+v", reply)
+	}
+
+	var st Status
+	resp = do(t, ts, "GET", "/v1/status", "", nil)
+	_ = json.NewDecoder(resp.Body).Decode(&st)
+	if st.Visible || st.Config.Enabled || st.Hidden != presence.HiddenOff {
+		t.Errorf("status must explain: visible=%v enabled=%v hidden=%q", st.Visible, st.Config.Enabled, st.Hidden)
+	}
+}
+
+func TestConfigPostKeepsUntouchedSettings(t *testing.T) {
+	ts, cfg := newTestServer(t)
+	postVisibility(t, ts, `{"action":"hide"}`)
+
+	// The dashboard's settings form doesn't send "enabled"; saving it must not switch the presence back on.
+	resp := do(t, ts, "POST", "/v1/config", `{"privateMode":true,"hideMatching":["  Secret ","secret","x"]}`, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	got := cfg.Get()
+	if got.Enabled || !got.PrivateMode || len(got.HideMatching) != 2 || got.HideMatching[0] != "secret" || !got.ShowProgress {
+		t.Errorf("partial save wrong: %+v", got)
+	}
+}

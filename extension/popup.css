@@ -43,3 +43,9 @@ a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 button { margin-top: 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--link); background: transparent; color: var(--link); font: inherit; cursor: pointer; display: block; }
 button:disabled { opacity: .5; cursor: default; }
+#power { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--ok); }
+#power.off { border-color: var(--warn); }
+#power .what { flex: 1; min-width: 0; font-weight: 600; }
+#power .what small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+#power button { margin: 0; display: inline-block; white-space: nowrap; }
+#power button.primary { background: var(--link); border-color: var(--link); color: var(--bg); }

@@ -42,6 +42,46 @@ func trackURL(sel Selected) string {
 	return "https://music.youtube.com/search?q=" + url.QueryEscape(q)
 }
 
+// Why a song that is playing or paused is not on Discord. The engine adds
+// HiddenOff and HiddenSnoozed (the user's own switches); the rest come from
+// the settings. The dashboard and popup turn these into plain sentences.
+const (
+	HiddenOff           = "off"            // the master switch is off
+	HiddenSnoozed       = "snoozed"        // hidden for a while on request
+	HiddenPaused        = "paused"         // paused, and settings say not to show that
+	HiddenPausedTimeout = "paused-timeout" // paused for longer than the limit
+	HiddenFiltered      = "filtered"       // matched a "never show" word
+)
+
+// hiddenReason says why the settings keep this song off Discord ("" = show it).
+func hiddenReason(cfg config.Config, sel Selected, now time.Time) string {
+	if matchesHidden(cfg.HideMatching, sel) {
+		return HiddenFiltered
+	}
+	if sel.State == StatePaused {
+		if !cfg.ShowPaused {
+			return HiddenPaused
+		}
+		if now.Sub(sel.PausedSince) > time.Duration(cfg.PauseTimeoutMinutes)*time.Minute {
+			return HiddenPausedTimeout
+		}
+	}
+	return ""
+}
+
+func matchesHidden(words []string, sel Selected) bool {
+	if len(words) == 0 {
+		return false
+	}
+	hay := strings.ToLower(sel.Title + "\n" + sel.Artist + "\n" + sel.Album)
+	for _, w := range words {
+		if w = strings.ToLower(strings.TrimSpace(w)); w != "" && strings.Contains(hay, w) {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildActivity turns the selected track into a Discord activity. It returns
 // nil when nothing should be shown (for example paused for too long). The
 // second result is the start timestamp in milliseconds (0 when none), which
@@ -50,14 +90,12 @@ func trackURL(sel Selected) string {
 // basic=true leaves out the newer, optional fields. The engine falls back to it
 // if a Discord client rejects the full version.
 func BuildActivity(cfg config.Config, sel Selected, now time.Time, basic bool) (*discord.Activity, int64) {
+	if hiddenReason(cfg, sel, now) != "" {
+		return nil, 0
+	}
 	paused := sel.State == StatePaused
-	if paused {
-		if !cfg.ShowPaused {
-			return nil, 0
-		}
-		if now.Sub(sel.PausedSince) > time.Duration(cfg.PauseTimeoutMinutes)*time.Minute {
-			return nil, 0
-		}
+	if cfg.PrivateMode {
+		return buildPrivate(cfg, paused, basic), 0
 	}
 
 	act := &discord.Activity{
@@ -67,7 +105,7 @@ func BuildActivity(cfg config.Config, sel Selected, now time.Time, basic bool) (
 	}
 
 	var start int64
-	if !paused {
+	if !paused && cfg.ShowProgress {
 		start = sel.ReceivedAt.Add(-time.Duration(sel.Position * float64(time.Second))).UnixMilli()
 		ts := &discord.Timestamps{Start: start}
 		if sel.Duration > 0 && sel.Position <= sel.Duration+1 {
@@ -90,13 +128,7 @@ func BuildActivity(cfg config.Config, sel Selected, now time.Time, basic bool) (
 		}
 		assets.LargeText = field(text)
 	}
-	if !basic {
-		if paused {
-			assets.SmallImage, assets.SmallText = assetPause, "Paused"
-		} else {
-			assets.SmallImage, assets.SmallText = assetPlay, "Playing"
-		}
-	}
+	addStateIcon(cfg, assets, paused, basic)
 	if *assets != (discord.Assets{}) {
 		act.Assets = assets
 	}
@@ -116,4 +148,32 @@ func BuildActivity(cfg config.Config, sel Selected, now time.Time, basic bool) (
 		}
 	}
 	return act, start
+}
+
+// addStateIcon adds the small play / pause badge (needs the uploaded art assets).
+func addStateIcon(cfg config.Config, assets *discord.Assets, paused, basic bool) {
+	if basic || !cfg.ShowStateIcon {
+		return
+	}
+	if paused {
+		assets.SmallImage, assets.SmallText = assetPause, "Paused"
+	} else {
+		assets.SmallImage, assets.SmallText = assetPlay, "Playing"
+	}
+}
+
+// buildPrivate is the card for private mode: it says you're listening and
+// nothing about what to. It is the same for every song, so changing tracks
+// does not even cause an update.
+func buildPrivate(cfg config.Config, paused, basic bool) *discord.Activity {
+	act := &discord.Activity{Type: discord.TypeListening, Details: "Listening to music"}
+	assets := &discord.Assets{}
+	if !basic {
+		assets.LargeImage = assetLogo
+	}
+	addStateIcon(cfg, assets, paused, basic)
+	if *assets != (discord.Assets{}) {
+		act.Assets = assets
+	}
+	return act
 }

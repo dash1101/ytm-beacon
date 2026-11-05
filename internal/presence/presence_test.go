@@ -492,3 +492,184 @@ func TestInjectTest(t *testing.T) {
 		t.Error("self-test must disappear on its own")
 	}
 }
+
+// ---- switches and extra settings ---------------------------------------------
+
+func TestBuildProgressAndIconSettings(t *testing.T) {
+	now := newClock().t
+	sel := Selected{Update: song("a", "Song", StatePlaying, 30, 200), ReceivedAt: now}
+
+	cfg := config.Default()
+	cfg.ShowProgress = false
+	act, start := BuildActivity(cfg, sel, now, false)
+	if act.Timestamps != nil || start != 0 {
+		t.Errorf("ShowProgress=false must send no timestamps: %+v start=%d", act.Timestamps, start)
+	}
+
+	cfg = config.Default()
+	cfg.ShowStateIcon = false
+	act, _ = BuildActivity(cfg, sel, now, false)
+	if act.Assets.SmallImage != "" || act.Assets.SmallText != "" || act.Assets.LargeImage == "" {
+		t.Errorf("ShowStateIcon=false must drop only the small badge: %+v", act.Assets)
+	}
+}
+
+func TestBuildHidesMatchingWords(t *testing.T) {
+	now := newClock().t
+	sel := Selected{Update: song("a", "A Very Secret Song", StatePlaying, 0, 100), ReceivedAt: now}
+
+	cfg := config.Default()
+	cfg.HideMatching = []string{"nothing here", "SECRET"} // capitalisation is ignored
+	if act, _ := BuildActivity(cfg, sel, now, false); act != nil {
+		t.Error("a title containing a listed word must not be shown")
+	}
+	sel.Title, sel.Artist = "Fine", "The Secret Band"
+	if act, _ := BuildActivity(cfg, sel, now, false); act != nil {
+		t.Error("the artist is checked too")
+	}
+	sel.Artist, sel.Album = "Fine", "Secret Album"
+	if act, _ := BuildActivity(cfg, sel, now, false); act != nil {
+		t.Error("the album is checked too")
+	}
+	sel.Album = "Fine"
+	if act, _ := BuildActivity(cfg, sel, now, false); act == nil {
+		t.Error("no match, so it must be shown")
+	}
+}
+
+func TestBuildPrivateMode(t *testing.T) {
+	now := newClock().t
+	sel := Selected{Update: song("a", "My Guilty Pleasure", StatePlaying, 30, 200), ReceivedAt: now}
+	cfg := config.Default()
+	cfg.PrivateMode = true
+	cfg.StatusDisplay = config.StatusDetails
+
+	act, start := BuildActivity(cfg, sel, now, false)
+	if act == nil {
+		t.Fatal("private mode still shows a card")
+	}
+	if start != 0 || act.Timestamps != nil || len(act.Buttons) != 0 || act.State != "" || act.StatusDisplayType != nil {
+		t.Errorf("private mode must not reveal timing, a link or status text: %+v", act)
+	}
+	if act.Assets == nil || act.Assets.LargeImage != "logo" || strings.Contains(act.Assets.LargeText, "Album") {
+		t.Errorf("private mode must use the logo, not the album art: %+v", act.Assets)
+	}
+	raw := act.Details + act.State + act.Assets.LargeImage + act.Assets.LargeText
+	for _, secret := range []string{"Guilty", "Artist", "Album", "googleusercontent"} {
+		if strings.Contains(raw, secret) {
+			t.Errorf("private card leaks %q: %+v", secret, act)
+		}
+	}
+
+	// Changing song changes nothing, so no update is sent for it.
+	sel2 := Selected{Update: song("a", "Another Song", StatePlaying, 5, 100), ReceivedAt: now}
+	act2, _ := BuildActivity(cfg, sel2, now, false)
+	if activityKey(act) != activityKey(act2) {
+		t.Error("in private mode every song must look the same")
+	}
+	// The pause timeout still applies.
+	paused := Selected{Update: song("a", "S", StatePaused, 0, 0), ReceivedAt: now, PausedSince: now}
+	if a, _ := BuildActivity(cfg, paused, now.Add(time.Hour), false); a != nil {
+		t.Error("a long pause still hides the private card")
+	}
+}
+
+func TestEngineMasterSwitch(t *testing.T) {
+	t.Setenv("YTM_BEACON_CLIENT_ID", "")
+	h := newHarness(testConfig())
+	h.step()
+	h.tr.Put(song("a", "One", StatePlaying, 10, 200))
+	h.step()
+	if h.conn().last() == nil || !h.eng.Snapshot().PresenceActive {
+		t.Fatal("expected the song to be shown first")
+	}
+
+	c := h.cfg.Get()
+	c.Enabled = false
+	_ = h.cfg.Set(c)
+	h.clk.Advance(5 * time.Second)
+	h.tr.Put(song("a", "One", StatePlaying, 15, 200))
+	h.step()
+	snap := h.eng.Snapshot()
+	if h.conn().last() != nil || snap.PresenceActive {
+		t.Fatalf("switching off must clear the card: last=%v active=%v", h.conn().last(), snap.PresenceActive)
+	}
+	if snap.Hidden != HiddenOff || snap.NowPlaying == nil {
+		t.Errorf("snapshot must say why: hidden=%q np=%v", snap.Hidden, snap.NowPlaying)
+	}
+
+	// While off, a new song still doesn't appear, and nothing is sent.
+	n := h.conn().count()
+	h.clk.Advance(5 * time.Second)
+	h.tr.Put(song("a", "Two", StatePlaying, 0, 100))
+	h.step()
+	if h.conn().count() != n {
+		t.Error("nothing may be sent while switched off")
+	}
+
+	c.Enabled = true
+	_ = h.cfg.Set(c)
+	h.clk.Advance(5 * time.Second)
+	h.step()
+	if h.conn().last() == nil || h.conn().last().Details != "Two" || h.eng.Snapshot().Hidden != "" {
+		t.Errorf("switching on must show the current song: %+v", h.conn().last())
+	}
+}
+
+func TestEngineTimedHide(t *testing.T) {
+	t.Setenv("YTM_BEACON_CLIENT_ID", "")
+	h := newHarness(testConfig())
+	h.step()
+	h.tr.Put(song("a", "One", StatePlaying, 10, 200))
+	h.step()
+
+	h.eng.HideFor(30 * time.Minute)
+	h.clk.Advance(5 * time.Second)
+	h.tr.Put(song("a", "One", StatePlaying, 15, 200))
+	h.step()
+	snap := h.eng.Snapshot()
+	if h.conn().last() != nil || snap.Hidden != HiddenSnoozed || snap.SnoozeSec < 29*60 || snap.SnoozeSec > 30*60 {
+		t.Fatalf("hide for 30 minutes: last=%v hidden=%q sec=%d", h.conn().last(), snap.Hidden, snap.SnoozeSec)
+	}
+
+	// Ends by itself.
+	h.clk.Advance(31 * time.Minute)
+	h.tr.Put(song("a", "One", StatePlaying, 31*60, 3600))
+	h.step()
+	if h.conn().last() == nil || h.eng.Snapshot().SnoozeSec != 0 {
+		t.Error("the song must come back when the time is up")
+	}
+
+	// And can be ended early.
+	h.eng.HideFor(time.Hour)
+	h.clk.Advance(5 * time.Second)
+	h.tr.Put(song("a", "One", StatePlaying, 31*60+5, 3600))
+	h.step()
+	if h.conn().last() != nil {
+		t.Fatal("hidden again")
+	}
+	h.eng.CancelHide()
+	h.clk.Advance(5 * time.Second)
+	h.step()
+	if h.conn().last() == nil {
+		t.Error("CancelHide must bring it back")
+	}
+}
+
+func TestSnapshotExplainsSettingsHiding(t *testing.T) {
+	t.Setenv("YTM_BEACON_CLIENT_ID", "")
+	cfg := testConfig()
+	cfg.HideMatching = []string{"artist"}
+	h := newHarness(cfg)
+	h.tr.Put(song("a", "One", StatePlaying, 10, 200))
+	if got := h.eng.Snapshot().Hidden; got != HiddenFiltered {
+		t.Errorf("want %q, got %q", HiddenFiltered, got)
+	}
+	cfg.HideMatching = nil
+	cfg.ShowPaused = false
+	_ = h.cfg.Set(cfg)
+	h.tr.Put(song("a", "One", StatePaused, 10, 200))
+	if got := h.eng.Snapshot().Hidden; got != HiddenPaused {
+		t.Errorf("want %q, got %q", HiddenPaused, got)
+	}
+}

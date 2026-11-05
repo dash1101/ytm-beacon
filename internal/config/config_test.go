@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ func TestMissingFileGivesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Get() != Default() {
+	if !reflect.DeepEqual(s.Get(), Default()) {
 		t.Errorf("got %+v", s.Get())
 	}
 }
@@ -49,6 +50,45 @@ func TestPartialFileKeepsDefaults(t *testing.T) {
 	if c := s.Get(); c.ShowButtons || !c.ShowPaused || !c.ShowAlbumArt || c.PauseTimeoutMinutes != 5 {
 		t.Errorf("unset fields must keep defaults: %+v", c)
 	}
+	// A settings file written by an older version has none of the newer fields;
+	// they must come out switched on (or empty), not silently off.
+	if c := s.Get(); !c.Enabled || !c.ShowProgress || !c.ShowStateIcon || c.PrivateMode || len(c.HideMatching) != 0 {
+		t.Errorf("newer settings must default sensibly: %+v", c)
+	}
+}
+
+func TestHideMatchingIsCleaned(t *testing.T) {
+	c := Default()
+	c.HideMatching = []string{"  Taylor Swift ", "", "taylor swift", "LIVE", "   "}
+	for i := 0; i < 80; i++ {
+		c.HideMatching = append(c.HideMatching, "word"+strings.Repeat("x", i))
+	}
+	if err := c.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.HideMatching; len(got) != maxHideWords || got[0] != "taylor swift" || got[1] != "live" {
+		t.Errorf("not cleaned: %d words, starts %q", len(got), got[:2])
+	}
+	c.HideMatching = nil
+	_ = c.Normalize()
+	if c.HideMatching == nil {
+		t.Error("an empty list must stay a list (not null) so the API and file show []")
+	}
+}
+
+func TestGetReturnsACopy(t *testing.T) {
+	s := NewMemoryStore(Default())
+	c := Default()
+	c.HideMatching = []string{"a", "b"}
+	if err := s.Set(c); err != nil {
+		t.Fatal(err)
+	}
+	c.HideMatching[0] = "changed by the caller"
+	got := s.Get()
+	got.HideMatching[0] = "changed"
+	if s.Get().HideMatching[0] != "a" {
+		t.Error("editing the copy returned by Get must not change the stored settings")
+	}
 }
 
 func TestBrokenFileFallsBackWithError(t *testing.T) {
@@ -61,7 +101,7 @@ func TestBrokenFileFallsBackWithError(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), path) {
 			t.Errorf("%q: want an error naming the file, got %v", content, err)
 		}
-		if s.Get() != Default() {
+		if !reflect.DeepEqual(s.Get(), Default()) {
 			t.Errorf("%q: must fall back to defaults", content)
 		}
 	}

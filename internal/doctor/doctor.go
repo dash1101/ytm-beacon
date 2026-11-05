@@ -130,9 +130,17 @@ func reportRunning(r *report, st *server.Status) {
 	if np := st.NowPlaying; np != nil {
 		r.info("Now playing: %s - %s [%s]", np.Title, np.Artist, np.State)
 	}
+	if !st.Visible {
+		if st.Config.Enabled {
+			r.warn("Hidden on purpose for about %d more minute(s)", (st.SnoozeSec+59)/60)
+		} else {
+			r.warn("Showing on Discord is switched off")
+		}
+		r.fix("Run:  ytm-beacon show")
+	}
 	if st.PresenceActive {
 		r.ok("Presence is visible on Discord")
-	} else if st.Discord.State == presence.StateConnected && st.NowPlaying != nil {
+	} else if st.Discord.State == presence.StateConnected && st.NowPlaying != nil && st.Hidden == "" {
 		r.warn("Something is playing but nothing is showing on Discord")
 		r.fix("Check Discord > Settings > Activity Privacy > \"Share my activity\" is on, and that you are not set to Invisible.")
 	}

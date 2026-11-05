@@ -20,6 +20,75 @@ async function fetchStatus() {
   return null;
 }
 
+// Hide, show or toggle the presence. The popup talks to the app directly.
+async function setVisibility(port, action, minutes) {
+  await fetch(`http://127.0.0.1:${port}/v1/visibility`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action, minutes }),
+  });
+}
+
+function minutesLeft(sec) {
+  const m = Math.max(1, Math.ceil(sec / 60));
+  return m >= 120 ? `${Math.round(m / 60)} hours` : m >= 60 ? 'an hour' : `${m} minute${m === 1 ? '' : 's'}`;
+}
+
+// The keyboard shortcut as the browser has it set (users can change or clear it).
+async function shortcutText() {
+  try {
+    const all = await ext.commands.getAll();
+    const c = all.find((x) => x.name === 'toggle-presence');
+    return (c && c.shortcut) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// The on / off control at the top: the quickest way to stop showing on Discord.
+async function renderPower(port, status) {
+  const shortcut = await shortcutText();
+  const box = document.getElementById('power');
+  box.textContent = '';
+  box.hidden = false;
+  const what = document.createElement('div');
+  what.className = 'what';
+  const sub = document.createElement('small');
+  const button = (label, action, minutes, primary) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (primary) b.className = 'primary';
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await setVisibility(port, action, minutes);
+      } catch (_) {
+        // the next render shows the real state
+      }
+      render();
+    });
+    return b;
+  };
+  const buttons = [];
+  if (status.visible) {
+    box.className = '';
+    what.append('Showing on Discord', sub);
+    sub.textContent = shortcut ? `${shortcut} switches it off` : 'Stops until you turn it back on';
+    buttons.push(button('Stop', 'hide', 0), button('1 hour', 'hide', 60));
+  } else if (!status.config.enabled) {
+    box.className = 'off';
+    what.append('Switched off', sub);
+    sub.textContent = 'Nothing is shown on Discord';
+    buttons.push(button('Show again', 'show', 0, true));
+  } else {
+    box.className = 'off';
+    what.append('Hidden for now', sub);
+    sub.textContent = `Back in ${minutesLeft(status.snoozeSec)}`;
+    buttons.push(button('Show now', 'show', 0, true));
+  }
+  box.append(what, ...buttons);
+}
+
 function row(kind, text, detail, action) {
   const li = document.createElement('li');
   li.className = kind;
@@ -126,6 +195,7 @@ async function render() {
   const hint = document.getElementById('hint');
   checks.textContent = '';
   hint.hidden = true;
+  document.getElementById('power').hidden = true;
 
   const found = await fetchStatus();
   if (!found) {
@@ -140,6 +210,7 @@ async function render() {
   const { port, status } = found;
   document.getElementById('version').textContent = `v${status.version}`;
   document.getElementById('dashboard').href = `http://127.0.0.1:${port}/`;
+  await renderPower(port, status);
 
   checks.append(row('ok', 'YTM Beacon app is running'));
   checks.append(discordRow(status.discord));
@@ -153,7 +224,13 @@ async function render() {
 
   const np = status.nowPlaying;
   if (status.presenceActive && np) {
-    checks.append(row('ok', 'Showing on Discord', `${np.title} — ${np.artist}`));
+    // Private mode shows nothing about the song, so the popup doesn't either.
+    const detail = status.config.privateMode ? 'Private mode: only "Listening to music"' : `${np.title} — ${np.artist}`;
+    checks.append(row('ok', 'Showing on Discord', detail));
+  } else if (np && status.hidden === 'filtered') {
+    checks.append(row('warn', 'Not shown: matches your "never show" words', 'Change them on the dashboard.'));
+  } else if (np && (status.hidden === 'off' || status.hidden === 'snoozed')) {
+    checks.append(row('warn', 'Not showing on Discord', 'You turned it off (see the switch above).'));
   } else if (np && np.state === 'paused') {
     checks.append(row('warn', 'Paused', 'Presence is hidden while paused (see dashboard settings).'));
   } else {

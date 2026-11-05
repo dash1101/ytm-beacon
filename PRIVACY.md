@@ -32,7 +32,8 @@ errors, plus song titles when you run with `--debug`).
 
 On your computer only:
 
-- `config.json`: your settings (for example whether to show the button).
+- `config.json`: your settings (for example whether to show the button, and your list of
+  "never show" words if you add any).
 - A log file and an empty marker file that records that setup finished.
 - The extension keeps one small note in the browser's local extension storage (which version it last
   reloaded itself for), so that it never reloads in a loop.
