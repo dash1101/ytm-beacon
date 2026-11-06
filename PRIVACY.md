@@ -21,7 +21,8 @@ any other website.
 2. **From the app to the Discord desktop app on your own computer**, through Discord's local
    Rich Presence connection. Discord then shows the card on your profile according to *your* Discord
    privacy settings, and Discord's own privacy policy applies to what it does with it. Discord's servers
-   fetch the album art image themselves.
+   fetch the album art image themselves, and the small logo and play / pause icons (from this
+   project's public `assets/` folder on GitHub).
 
 Nothing else is sent anywhere. There is no server run by this project, no account, no telemetry,
 no analytics, no advertising and no crash reporting. The song information is held in memory only

@@ -24,7 +24,7 @@ func TestSaveAndReload(t *testing.T) {
 	c := s.Get()
 	c.ClientID = " 123456789012345678 "
 	c.ShowButtons = false
-	c.PauseTimeoutMinutes = 0 // clamped
+	c.PauseTimeoutMinutes = -3 // clamped to 0 (no limit)
 	if err := s.Set(c); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestSaveAndReload(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := s2.Get()
-	if got.ClientID != "123456789012345678" || got.ShowButtons || got.PauseTimeoutMinutes != 1 {
+	if got.ClientID != "123456789012345678" || got.ShowButtons || got.PauseTimeoutMinutes != 0 {
 		t.Errorf("not persisted correctly: %+v", got)
 	}
 }

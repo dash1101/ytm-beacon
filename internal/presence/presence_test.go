@@ -3,6 +3,7 @@ package presence
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -117,7 +118,7 @@ func TestBuildPlaying(t *testing.T) {
 	if start != wantStart || act.Timestamps.Start != wantStart || act.Timestamps.End != wantStart+200_000 {
 		t.Errorf("bad timestamps: start=%d %+v", start, act.Timestamps)
 	}
-	if act.Assets.LargeImage != sel.Artwork || act.Assets.LargeText != "Album" || act.Assets.SmallImage != "play" {
+	if act.Assets.LargeImage != sel.Artwork || act.Assets.LargeText != "Album" || act.Assets.SmallImage != assetPlay {
 		t.Errorf("bad assets: %+v", act.Assets)
 	}
 	if len(act.Buttons) != 1 || act.Buttons[0].URL != "https://music.youtube.com/watch?v=dQw4w9WgXcQ" {
@@ -133,7 +134,7 @@ func TestBuildPausedAndTimeout(t *testing.T) {
 	sel := Selected{Update: song("a", "Song", StatePaused, 30, 200), ReceivedAt: clk.t, PausedSince: clk.t}
 
 	act, start := BuildActivity(config.Default(), sel, clk.t.Add(time.Minute), false)
-	if act == nil || act.Timestamps != nil || start != 0 || act.Assets.SmallImage != "pause" {
+	if act == nil || act.Timestamps != nil || start != 0 || act.Assets.SmallImage != assetPause {
 		t.Errorf("paused card wrong: %+v start=%d", act, start)
 	}
 
@@ -167,7 +168,7 @@ func TestBuildOptions(t *testing.T) {
 	if act.Timestamps.End != 0 {
 		t.Error("unknown duration must not produce an end time")
 	}
-	if act.Assets.LargeImage != "logo" {
+	if act.Assets.LargeImage != assetLogo {
 		t.Errorf("fallback logo expected, got %+v", act.Assets)
 	}
 	if act.StatusDisplayType == nil || *act.StatusDisplayType != discord.StatusDisplayDetails {
@@ -366,7 +367,7 @@ func TestEnginePauseThenClear(t *testing.T) {
 	h.clk.Advance(3 * time.Second)
 	h.tr.Put(song("a", "One", StatePaused, 13, 200))
 	h.step()
-	if last := h.conn().last(); last == nil || last.Timestamps != nil || last.Assets.SmallImage != "pause" {
+	if last := h.conn().last(); last == nil || last.Timestamps != nil || last.Assets.SmallImage != assetPause {
 		t.Fatalf("paused card expected: %+v", last)
 	}
 
@@ -551,7 +552,7 @@ func TestBuildPrivateMode(t *testing.T) {
 	if start != 0 || act.Timestamps != nil || len(act.Buttons) != 0 || act.State != "" || act.StatusDisplayType != nil {
 		t.Errorf("private mode must not reveal timing, a link or status text: %+v", act)
 	}
-	if act.Assets == nil || act.Assets.LargeImage != "logo" || strings.Contains(act.Assets.LargeText, "Album") {
+	if act.Assets == nil || act.Assets.LargeImage != assetLogo || strings.Contains(act.Assets.LargeText, "Album") {
 		t.Errorf("private mode must use the logo, not the album art: %+v", act.Assets)
 	}
 	raw := act.Details + act.State + act.Assets.LargeImage + act.Assets.LargeText
@@ -713,5 +714,70 @@ func TestThrottledBackgroundTabDoesNotFlicker(t *testing.T) {
 func TestQuietAfterIsOverOneMinute(t *testing.T) {
 	if QuietAfter() <= 65*time.Second {
 		t.Errorf("a throttled tab reports about every 60s, so %v would flag it as gone", QuietAfter())
+	}
+}
+
+// ---- show when paused --------------------------------------------------------
+
+func TestShowWhenPaused(t *testing.T) {
+	clk := newClock()
+	sel := Selected{Update: song("a", "Song", StatePaused, 30, 200), ReceivedAt: clk.t, PausedSince: clk.t}
+
+	// On: the song stays, with the pause icon and no progress bar.
+	cfg := config.Default()
+	act, _ := BuildActivity(cfg, sel, clk.t.Add(time.Minute), false)
+	if act == nil || act.Details != "Song" || act.Timestamps != nil || act.Assets.SmallImage != assetPause || act.Assets.SmallText != "Paused" {
+		t.Errorf("paused card should show the song with a pause icon: %+v", act)
+	}
+
+	// Off: nothing at all.
+	cfg.ShowPaused = false
+	if act, _ := BuildActivity(cfg, sel, clk.t, false); act != nil {
+		t.Errorf("Show when paused off must hide the card completely: %+v", act)
+	}
+}
+
+func TestPauseTimeoutZeroNeverHides(t *testing.T) {
+	clk := newClock()
+	sel := Selected{Update: song("a", "Song", StatePaused, 30, 200), ReceivedAt: clk.t, PausedSince: clk.t}
+	cfg := config.Default()
+
+	cfg.PauseTimeoutMinutes = 0
+	if act, _ := BuildActivity(cfg, sel, clk.t.Add(48*time.Hour), false); act == nil {
+		t.Error("0 minutes means no limit: the paused song must stay")
+	}
+	cfg.PauseTimeoutMinutes = 10
+	if act, _ := BuildActivity(cfg, sel, clk.t.Add(11*time.Minute), false); act != nil {
+		t.Error("a positive limit still hides a long pause")
+	}
+	if act, _ := BuildActivity(cfg, sel, clk.t.Add(9*time.Minute), false); act == nil {
+		t.Error("and not before it")
+	}
+}
+
+// Images for the logo and the play / pause badge must be web addresses: a bare
+// key only works once someone uploads art to the Discord application.
+func TestBadgeImagesAreWebAddresses(t *testing.T) {
+	now := newClock().t
+	for _, state := range []string{StatePlaying, StatePaused} {
+		sel := Selected{Update: song("a", "Song", state, 5, 100), ReceivedAt: now, PausedSince: now}
+		sel.Artwork = "" // so the logo is used too
+		act, _ := BuildActivity(config.Default(), sel, now, false)
+		for _, img := range []string{act.Assets.LargeImage, act.Assets.SmallImage} {
+			if !strings.HasPrefix(img, "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/") || !strings.HasSuffix(img, ".png") {
+				t.Errorf("%s: %q is not a web address of an image in assets/", state, img)
+			}
+		}
+	}
+}
+
+// The addresses above point at these files in the repository, so renaming or
+// deleting one would silently break the icons.
+func TestBadgeImageFilesExist(t *testing.T) {
+	for _, img := range []string{assetLogo, assetPlay, assetPause} {
+		name := img[strings.LastIndex(img, "/")+1:]
+		if _, err := os.Stat("../../assets/" + name); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

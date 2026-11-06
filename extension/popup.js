@@ -29,6 +29,29 @@ async function setVisibility(port, action, minutes) {
   });
 }
 
+// "Show when paused": keep the song on your profile (with a pause icon) while
+// paused, or hide the card completely the moment you pause.
+function renderPausedToggle(port, status) {
+  const row = document.getElementById('pausedRow');
+  const box = document.getElementById('showPaused');
+  row.hidden = false;
+  box.checked = !!status.config.showPaused;
+  box.onchange = async () => {
+    box.disabled = true;
+    try {
+      await fetch(`http://127.0.0.1:${port}/v1/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ showPaused: box.checked }),
+      });
+    } catch (_) {
+      // the next render shows the real state
+    }
+    box.disabled = false;
+    render();
+  };
+}
+
 function minutesLeft(sec) {
   const m = Math.max(1, Math.ceil(sec / 60));
   return m >= 120 ? `${Math.round(m / 60)} hours` : m >= 60 ? 'an hour' : `${m} minute${m === 1 ? '' : 's'}`;
@@ -202,6 +225,7 @@ async function render() {
   checks.textContent = '';
   hint.hidden = true;
   document.getElementById('power').hidden = true;
+  document.getElementById('pausedRow').hidden = true;
 
   const found = await fetchStatus();
   if (!found) {
@@ -217,6 +241,7 @@ async function render() {
   document.getElementById('version').textContent = versionLabel(status.version);
   document.getElementById('dashboard').href = `http://127.0.0.1:${port}/`;
   await renderPower(port, status);
+  renderPausedToggle(port, status);
 
   checks.append(row('ok', 'YTM Beacon app is running'));
   checks.append(discordRow(status.discord));

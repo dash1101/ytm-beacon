@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Show when paused**, clearer: on, your song stays with a pause icon next to it; off, the card disappears
+  completely when you pause. It sits with the other card options on the dashboard and is also a checkbox
+  in the toolbar popup.
+- **The pause icon now actually shows.** The logo and play / pause badge were sent as names of images that
+  had to be uploaded to the Discord application (and weren't), so Discord showed nothing. They're now sent
+  as web addresses of the files in `assets/`, so there is nothing to upload.
+- A paused song can be kept on your profile for good: set the time limit to 0.
 - A paused song in a background tab no longer flickers on and off in Discord. Browsers slow such a tab
   to about one report a minute, and the app forgot it after 45 seconds; it now waits 90. The
   dashboard, popup and `doctor` use the same number for "extension went quiet" instead of 20 seconds.

@@ -17,6 +17,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 22px; margin: 0 0 2px; }
@@ -57,6 +58,7 @@
   .power .what { flex: 1 1 260px; min-width: 0; }
   .power .what b { font-size: 16px; }
   .power .actions { margin: 0; }
+  .indent { margin: -2px 0 6px 28px; }
   h3 { font-size: 13px; margin: 18px 0 4px; color: var(--muted); font-weight: 600; }
   h3:first-of-type { margin-top: 0; }
   textarea { width: 100%; min-height: 76px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
@@ -130,6 +132,14 @@
     <label class="row"><input type="checkbox" id="showAlbumArt"> Album art</label>
     <label class="row"><input type="checkbox" id="showProgress"> Progress bar and time</label>
     <label class="row"><input type="checkbox" id="showStateIcon"> Small play / pause icon</label>
+    <label class="row"><input type="checkbox" id="showPaused"> Show when paused</label>
+    <p class="hint indent">On: your song stays on your profile with a pause icon next to it. Off: your card
+      disappears completely as soon as you pause.</p>
+    <label class="col" id="pauseTimeoutRow">
+      <span>Stop showing a paused song after (minutes)</span>
+      <input type="number" id="pauseTimeoutMinutes" min="0" max="1440">
+      <p class="hint">0 keeps it on your profile until you press play again.</p>
+    </label>
     <label class="row"><input type="checkbox" id="showButtons"> A “Listen on YouTube Music” button</label>
     <label class="col">
       <span>Text next to your name in the member list</span>
@@ -146,13 +156,6 @@
       <span>Never show songs containing these words</span>
       <textarea id="hideMatching" placeholder="One per line, for example a song, artist or album name" spellcheck="false"></textarea>
       <p class="hint">Matches the title, artist and album, ignoring capitals. Those songs simply don't appear on Discord.</p>
-    </label>
-
-    <h3>When you pause</h3>
-    <label class="row"><input type="checkbox" id="showPaused"> Keep showing while paused</label>
-    <label class="col">
-      <span>Hide when paused for longer than (minutes)</span>
-      <input type="number" id="pauseTimeoutMinutes" min="1" max="1440">
     </label>
 
     <h3>Advanced</h3>
@@ -244,8 +247,8 @@ function render(s) {
   else if (s.hidden === 'off') ul.append(row('warn', 'Hidden: switched off', 'Use the button above to show again.'));
   else if (s.hidden === 'snoozed') ul.append(row('warn', 'Hidden for now', 'It comes back by itself.'));
   else if (s.hidden === 'filtered') ul.append(row('warn', 'Hidden: matches your “never show” words', 'Change them under Settings.'));
-  else if (s.hidden === 'paused') ul.append(row('warn', 'Hidden: paused', 'Turn on “Keep showing while paused” under Settings to show it.'));
-  else if (s.hidden === 'paused-timeout') ul.append(row('warn', 'Hidden: paused for a while', 'Adjust the time under Settings.'));
+  else if (s.hidden === 'paused') ul.append(row('warn', 'Hidden: paused', 'Turn on “Show when paused” under Settings to keep it on your profile.'));
+  else if (s.hidden === 'paused-timeout') ul.append(row('warn', 'Hidden: paused for a while', 'Change or turn off the time limit under Settings (0 keeps it on).'));
   else ul.append(row('warn', 'Nothing showing on Discord right now'));
 
   const np = s.nowPlaying;
@@ -276,6 +279,7 @@ function fillForm(c) {
   set('showStateIcon', (e) => (e.checked = c.showStateIcon));
   set('privateMode', (e) => (e.checked = c.privateMode));
   set('showPaused', (e) => (e.checked = c.showPaused));
+  $('pauseTimeoutRow').hidden = !c.showPaused;
   set('pauseTimeoutMinutes', (e) => (e.value = c.pauseTimeoutMinutes));
   set('statusDisplay', (e) => (e.value = c.statusDisplay));
   set('hideMatching', (e) => (e.value = (c.hideMatching || []).join('\n')));
@@ -357,7 +361,7 @@ async function saveSettings() {
     showStateIcon: $('showStateIcon').checked,
     privateMode: $('privateMode').checked,
     showPaused: $('showPaused').checked,
-    pauseTimeoutMinutes: parseInt($('pauseTimeoutMinutes').value, 10) || 5,
+    pauseTimeoutMinutes: Number.isNaN(parseInt($('pauseTimeoutMinutes').value, 10)) ? 5 : parseInt($('pauseTimeoutMinutes').value, 10),
     statusDisplay: $('statusDisplay').value,
     hideMatching: $('hideMatching').value.split('\n'),
   };
@@ -370,6 +374,7 @@ async function saveSettings() {
 }
 // Checkboxes and menus save at once; text boxes when you leave them or pause typing.
 document.querySelectorAll('input, select, textarea').forEach((el) => el.addEventListener('change', saveSettings));
+$('showPaused').addEventListener('change', () => { $('pauseTimeoutRow').hidden = !$('showPaused').checked; });
 for (const id of ['hideMatching', 'pauseTimeoutMinutes']) {
   $(id).addEventListener('input', () => {
     clearTimeout(saveTimer);

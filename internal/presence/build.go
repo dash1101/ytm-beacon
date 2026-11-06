@@ -10,13 +10,16 @@ import (
 	"github.com/dash1101/ytm-beacon/internal/discord"
 )
 
-// Asset keys. Upload assets/logo.png, play.png and pause.png to the Discord
-// application under these names (Developer Portal > Rich Presence > Art Assets).
-// If they are missing Discord simply shows no image there.
+// The logo and the play / pause badge are sent as web addresses, served from
+// this repository's assets/ folder. Discord fetches them itself, so nobody has
+// to upload art to a Discord application (an image key that isn't uploaded just
+// shows nothing, which is how the pause icon used to go missing).
+const assetBase = "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/"
+
 const (
-	assetLogo  = "logo"
-	assetPlay  = "play"
-	assetPause = "pause"
+	assetLogo  = assetBase + "logo.png"
+	assetPlay  = assetBase + "play.png"
+	assetPause = assetBase + "pause.png"
 )
 
 // field fits text into what Discord accepts (2-128 characters).
@@ -62,7 +65,7 @@ func hiddenReason(cfg config.Config, sel Selected, now time.Time) string {
 		if !cfg.ShowPaused {
 			return HiddenPaused
 		}
-		if now.Sub(sel.PausedSince) > time.Duration(cfg.PauseTimeoutMinutes)*time.Minute {
+		if limit := cfg.PauseTimeoutMinutes; limit > 0 && now.Sub(sel.PausedSince) > time.Duration(limit)*time.Minute {
 			return HiddenPausedTimeout
 		}
 	}
@@ -150,7 +153,7 @@ func BuildActivity(cfg config.Config, sel Selected, now time.Time, basic bool) (
 	return act, start
 }
 
-// addStateIcon adds the small play / pause badge (needs the uploaded art assets).
+// addStateIcon adds the small play / pause badge.
 func addStateIcon(cfg config.Config, assets *discord.Assets, paused, basic bool) {
 	if basic || !cfg.ShowStateIcon {
 		return

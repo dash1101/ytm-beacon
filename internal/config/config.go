@@ -40,9 +40,11 @@ type Config struct {
 	ClientID string `json:"clientId"`
 	// ShowButtons adds a "Listen on YouTube Music" button to your profile card.
 	ShowButtons bool `json:"showButtons"`
-	// ShowPaused keeps the card visible (marked paused) instead of hiding it.
+	// ShowPaused keeps the song on your profile while paused (with a pause icon)
+	// instead of hiding the card the moment you pause.
 	ShowPaused bool `json:"showPaused"`
-	// PauseTimeoutMinutes hides a paused card after this long.
+	// PauseTimeoutMinutes hides a paused card after this long. 0 means never:
+	// the song stays until you press play again.
 	PauseTimeoutMinutes int `json:"pauseTimeoutMinutes"`
 	// ShowAlbumArt shows the track's artwork instead of the app logo.
 	ShowAlbumArt bool `json:"showAlbumArt"`
@@ -90,8 +92,8 @@ func (c *Config) Normalize() error {
 	default:
 		return fmt.Errorf("statusDisplay must be %q, %q or %q", StatusName, StatusState, StatusDetails)
 	}
-	if c.PauseTimeoutMinutes < 1 {
-		c.PauseTimeoutMinutes = 1
+	if c.PauseTimeoutMinutes < 0 {
+		c.PauseTimeoutMinutes = 0
 	}
 	if c.PauseTimeoutMinutes > 24*60 {
 		c.PauseTimeoutMinutes = 24 * 60

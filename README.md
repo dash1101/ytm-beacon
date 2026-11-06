@@ -126,6 +126,9 @@ again is instant. "Switch off" is remembered across restarts; a timed hide is no
 **What your card shows:**
 
 - album art, progress bar and time, the small play / pause icon, and the "Listen on YouTube Music" button,
+- **Show when paused:** on, your song stays on your profile with a pause icon next to it (it goes away
+  after the number of minutes you choose, or never with 0); off, your card disappears completely the
+  moment you pause. The extension's toolbar popup has the same switch,
 - what Discord shows next to your name in the member list (*"Listening to YouTube Music"*, the song
   title, or the artist).
 
@@ -134,8 +137,6 @@ again is instant. "Switch off" is remembered across restarts; a timed hide is no
 - **Private mode** shows only *"Listening to music"*: no song, artist, album art or link.
 - **Never show songs containing these words**: a list (one per line) matched against the title,
   artist and album, ignoring capitals. Matching songs just don't appear.
-
-**When you pause:** keep the card (marked paused) or hide it, and after how many minutes it goes away.
 
 **Also:** send a test song to Discord without opening YouTube Music, copy diagnostics for a bug
 report, or use your own Discord application ID.
@@ -195,11 +196,11 @@ If you build from source or want your own name and images:
 1. Go to <https://discord.com/developers/applications> and click **New Application**.
    The name you pick is what appears after "Listening to" (for example *YouTube Music*).
 2. Copy the **Application ID** from the *General Information* page.
-3. (Optional) Under **Rich Presence > Art Assets**, upload [`assets/logo.png`](assets/logo.png),
-   [`assets/play.png`](assets/play.png) and [`assets/pause.png`](assets/pause.png) named exactly
-   `logo`, `play` and `pause`. They provide the fallback artwork and the little play/pause badge.
-4. Paste the Application ID into the dashboard (Settings), or set it in `config.json`, or set the
+3. Paste the Application ID into the dashboard (Settings), or set it in `config.json`, or set the
    `YTM_BEACON_CLIENT_ID` environment variable.
+
+There is nothing to upload to the application: the logo and the little play / pause badge are sent
+to Discord as web addresses of the images in this repository's [`assets/`](assets) folder.
 
 ## Privacy and safety
 
@@ -209,7 +210,8 @@ See the full [privacy policy](PRIVACY.md). In short:
   and `Host` headers), so no web page can read your status or fake what you're listening to.
 - The extension only runs on `music.youtube.com` and only talks to `127.0.0.1`.
 - The song title, artist, album and album art URL go to Discord, because that is the card. Discord's
-  servers fetch the artwork themselves.
+  servers fetch the artwork (and the small logo and play / pause icons, which live in this
+  repository's `assets/` folder) themselves.
 - There is no telemetry and no automatic update check. The only time the program uses the internet
   is when you run `ytm-beacon update`.
 
