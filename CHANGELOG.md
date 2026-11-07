@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
+
+Show when paused, and the pause icon that never showed.
 
 - **Show when paused**, clearer: on, your song stays with a pause icon next to it; off, the card disappears
   completely when you pause. It sits with the other card options on the dashboard and is also a checkbox
@@ -9,10 +11,12 @@
   had to be uploaded to the Discord application (and weren't), so Discord showed nothing. They're now sent
   as web addresses of the files in `assets/`, so there is nothing to upload.
 - A paused song can be kept on your profile for good: set the time limit to 0.
+
+## 0.1.3
+
 - A paused song in a background tab no longer flickers on and off in Discord. Browsers slow such a tab
   to about one report a minute, and the app forgot it after 45 seconds; it now waits 90. The
   dashboard, popup and `doctor` use the same number for "extension went quiet" instead of 20 seconds.
-- The dashboard and popup show the version as `v0.1.2`, not `vv0.1.2`.
 
 ## 0.1.2
 
@@ -30,6 +34,7 @@ Stop showing, and more settings.
   is showing (switched off, hidden for a while, a "never show" word, paused too long).
 - The installer waits for Discord's first connection instead of reporting "isn't open yet" too early.
 - The extension build now carries a `commands` entry (the shortcut). No new permissions.
+- The dashboard and popup show the version as `v0.1.2`, not `vv0.1.2`.
 
 ## 0.1.1
 
