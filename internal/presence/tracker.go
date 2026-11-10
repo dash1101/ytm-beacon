@@ -100,10 +100,11 @@ type Selected struct {
 }
 
 type entry struct {
-	u           Update
-	at          time.Time
-	expires     time.Time
-	pausedSince time.Time
+	u            Update
+	at           time.Time
+	expires      time.Time
+	pausedSince  time.Time
+	playingSince time.Time // when this tab last went from paused (or new) to playing
 }
 
 // SourceInfo describes one reporting tab, for the dashboard.
@@ -115,7 +116,10 @@ type SourceInfo struct {
 }
 
 // Tracker remembers the latest report from every YouTube Music tab and picks
-// the one to show: a playing tab beats a paused one, newest wins ties.
+// the one to show: a playing tab beats a paused one; between two playing tabs
+// the one where play was pressed last wins, between two paused ones the one
+// paused last. Those moments only change when you press something, so two
+// tabs reporting in turn never make Discord flip between them.
 type Tracker struct {
 	mu      sync.Mutex
 	now     func() time.Time
@@ -152,8 +156,12 @@ func (t *Tracker) Put(u Update) (isNew bool) {
 		if e.u.State != StatePaused || e.u.Title != u.Title || e.pausedSince.IsZero() {
 			e.pausedSince = now
 		}
+		e.playingSince = time.Time{}
 	} else {
 		e.pausedSince = time.Time{}
+		if e.playingSince.IsZero() {
+			e.playingSince = now
+		}
 	}
 	e.u, e.at, e.expires = u, now, now.Add(ttl)
 	return isNew
@@ -180,12 +188,7 @@ func (t *Tracker) Select() (Selected, bool) {
 	t.prune(t.now())
 	var best *entry
 	for _, e := range t.m {
-		if best == nil {
-			best = e
-			continue
-		}
-		bp, ep := best.u.State == StatePlaying, e.u.State == StatePlaying
-		if (ep && !bp) || (ep == bp && e.at.After(best.at)) {
+		if best == nil || e.beats(best) {
 			best = e
 		}
 	}
@@ -193,6 +196,23 @@ func (t *Tracker) Select() (Selected, bool) {
 		return Selected{}, false
 	}
 	return Selected{Update: best.u, ReceivedAt: best.at, PausedSince: best.pausedSince}, true
+}
+
+// beats reports whether e should be shown rather than o. The source name
+// breaks exact ties, so the choice never depends on map order.
+func (e *entry) beats(o *entry) bool {
+	ep, op := e.u.State == StatePlaying, o.u.State == StatePlaying
+	if ep != op {
+		return ep
+	}
+	a, b := e.pausedSince, o.pausedSince
+	if ep {
+		a, b = e.playingSince, o.playingSince
+	}
+	if !a.Equal(b) {
+		return a.After(b)
+	}
+	return e.u.Source < o.u.Source
 }
 
 // QuietAfter is how long without any report before an extension counts as

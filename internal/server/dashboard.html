@@ -4,16 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YTM Beacon</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #f4f5f7; --card: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d8dce1;
-    --ok: #1a7f37; --bad: #cf222e; --warn: #9a6700; --accent: #5865f2; --accent-fg: #fff;
+    --bg: #f6f3f2; --card: #ffffff; --fg: #1f2328; --muted: #646b73; --line: #e4dcda;
+    --ok: #1a7f37; --bad: #cf222e; --warn: #9a6700; --accent: #d9283b; --accent-fg: #fff;
+    --tint: #fff0ed; --brand: linear-gradient(90deg, #ff6a55, #ff1f3d); --disc: #1d2128;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17181a; --card: #1f2023; --fg: #e3e5e8; --muted: #9aa0a8; --line: #33363b;
-      --ok: #3fb950; --bad: #f85149; --warn: #d29922; --accent: #7983f5; --accent-fg: #101114;
+      --bg: #131416; --card: #1c1d20; --fg: #e6e7ea; --muted: #9ba0a8; --line: #2e3035;
+      --ok: #3fb950; --bad: #f85149; --warn: #d29922; --accent: #ff6b6b; --accent-fg: #1a0b0c;
+      --tint: #2a1c1c; --disc: #101216;
     }
   }
   * { box-sizing: border-box; }
@@ -63,12 +66,45 @@
   h3:first-of-type { margin-top: 0; }
   textarea { width: 100%; min-height: 76px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
   kbd { background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .card { border-radius: 14px; }
+  header.top { display: flex; align-items: center; gap: 14px; margin: 0 0 20px; }
+  header.top img { width: 52px; height: 52px; flex: none; }
+  header.top .sub { margin: 0; }
+  header.top .ver { margin-left: auto; align-self: flex-start; color: var(--muted); font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .bar > i { background: var(--brand); }
+  .times { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .welcome { background: var(--tint); }
+  /* Preview of the Discord card */
+  .pv { position: relative; border-radius: 12px; padding: 14px; background: var(--bg); border: 1px solid var(--line); }
+  .pv .who { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 10px; }
+  .pv .row { display: flex; gap: 14px; align-items: center; }
+  .pv .art { position: relative; width: 88px; height: 88px; flex: none; }
+  .pv .art img.main { width: 88px; height: 88px; border-radius: 10px; object-fit: cover; background: var(--line); display: block; }
+  .pv .badge { position: absolute; right: -6px; bottom: -6px; width: 30px; height: 30px; border-radius: 50%; background: var(--disc); border: 3px solid var(--bg); display: grid; place-items: center; }
+  .pv .badge svg { width: 14px; height: 14px; }
+  .pv .txt { min-width: 0; flex: 1; }
+  .pv .txt > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pv .t { font-weight: 700; }
+  .pv .a, .pv .al { color: var(--muted); font-size: 14px; }
+  .pv .btn { margin-top: 12px; text-align: center; padding: 7px; border-radius: 8px; background: var(--line); font-size: 14px; font-weight: 600; }
+  .pv.off .row, .pv.off .btn, .pv.off .who { opacity: .35; filter: grayscale(1); }
+  .pv .why { display: none; position: absolute; inset: auto 12px 12px 12px; padding: 8px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 14px; }
+  .pv.off .why { display: block; }
+  .pv.sample .t, .pv.sample .a { font-style: italic; }
+  .member { margin: 10px 2px 0; font-size: 13px; color: var(--muted); }
+  .member b { color: var(--fg); font-weight: 600; }
 </style>
 </head>
 <body>
 <main>
-  <h1>YTM Beacon</h1>
-  <p class="sub">Shows what you're playing on YouTube Music in your Discord profile.</p>
+  <header class="top">
+    <img src="/icon.svg" alt="">
+    <div>
+      <h1>YTM Beacon</h1>
+      <p class="sub">Shows what you're playing on YouTube Music in your Discord profile.</p>
+    </div>
+    <span class="ver" id="verTop" hidden></span>
+  </header>
 
   <section class="card power" id="powerCard">
     <div class="what">
@@ -122,6 +158,32 @@
       </div>
     </div>
     <div class="bar"><i id="npBar"></i></div>
+    <div class="times"><span id="npPos"></span><span id="npDur"></span></div>
+  </section>
+
+  <section class="card" id="pvCard">
+    <h2>Your Discord card</h2>
+    <div class="pv" id="pv">
+      <div class="who" id="pvWho">Listening to YouTube Music</div>
+      <div class="row">
+        <div class="art">
+          <img class="main" id="pvArt" alt="" referrerpolicy="no-referrer">
+          <span class="badge" id="pvBadge"></span>
+        </div>
+        <div class="txt">
+          <div class="t" id="pvTitle"></div>
+          <div class="a" id="pvArtist"></div>
+          <div class="al" id="pvAlbum"></div>
+          <div id="pvProg"><div class="bar"><i id="pvBar"></i></div>
+            <div class="times"><span id="pvPos"></span><span id="pvDur"></span></div></div>
+        </div>
+      </div>
+      <div class="btn" id="pvBtn">Listen on YouTube Music</div>
+      <div class="why" id="pvWhy"></div>
+    </div>
+    <p class="member" id="pvMember"></p>
+    <p class="hint">A preview of what your friends see. It follows the settings below as you change them; Discord's own
+      look differs a little between its apps.</p>
   </section>
 
   <section class="card">
@@ -228,6 +290,8 @@ function render(s) {
   renderSetup(s);
   renderPower(s);
   $('ver').textContent = versionLabel(s.version);
+  $('verTop').textContent = versionLabel(s.version);
+  $('verTop').hidden = !s.version;
   const ul = $('checks'); ul.textContent = '';
   ul.append(row('ok', 'YTM Beacon is running', `Port ${s.port}, up ${Math.round(s.uptimeSec / 60)} min`));
 
@@ -260,13 +324,100 @@ function render(s) {
     const art = $('npArt');
     if (np.artwork && art.dataset.src !== np.artwork) { art.src = np.artwork; art.dataset.src = np.artwork; }
     if (!np.artwork) { art.removeAttribute('src'); art.dataset.src = ''; }
-    $('npBar').style.width = np.duration > 0 ? Math.min(100, (np.position / np.duration) * 100) + '%' : '0';
   }
+  npAt = Date.now();
+  tickProgress();
+  renderPreview();
 
   if (!formLoaded) {
     fillForm(s.config);
     formLoaded = true;
+    renderPreview();
   }
+}
+
+// ---- live progress -----------------------------------------------------------
+// The page asks the app every 2 seconds; in between, a playing song's position
+// is worked out from the time that passed, so the bars move smoothly.
+let npAt = 0;
+function clock(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, x = String(sec % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
+}
+function livePosition(np) {
+  if (!np) return 0;
+  let p = np.position || 0;
+  if (np.state !== 'paused') p += (Date.now() - npAt) / 1000;
+  return np.duration > 0 ? Math.min(p, np.duration) : p;
+}
+function setBar(bar, pos, dur, posEl, durEl) {
+  bar.style.width = dur > 0 ? Math.min(100, (pos / dur) * 100) + '%' : '0';
+  posEl.textContent = dur > 0 || pos > 0 ? clock(pos) : '';
+  durEl.textContent = dur > 0 ? clock(dur) : '';
+}
+function tickProgress() {
+  const np = status && status.nowPlaying;
+  if (!np) return;
+  const pos = livePosition(np);
+  setBar($('npBar'), pos, np.duration, $('npPos'), $('npDur'));
+  setBar($('pvBar'), pos, np.duration, $('pvPos'), $('pvDur'));
+}
+setInterval(tickProgress, 250);
+
+// ---- preview of the Discord card ---------------------------------------------
+// Built from the form, not from the saved settings, so it changes the moment a
+// box is ticked. Mirrors internal/presence/build.go.
+const PLAY_ICON = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="#ff3b4a"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="#e8eaed"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="#e8eaed"/></svg>';
+function formConfig() {
+  const n = parseInt($('pauseTimeoutMinutes').value, 10);
+  return {
+    showButtons: $('showButtons').checked, showAlbumArt: $('showAlbumArt').checked, showProgress: $('showProgress').checked,
+    showStateIcon: $('showStateIcon').checked, privateMode: $('privateMode').checked, showPaused: $('showPaused').checked,
+    pauseTimeoutMinutes: Number.isNaN(n) ? 5 : n, statusDisplay: $('statusDisplay').value, clientId: $('clientId').value.trim(),
+    hideMatching: $('hideMatching').value.split('\n').map((w) => w.trim().toLowerCase()).filter(Boolean),
+  };
+}
+function whyHidden(s, c, np) {
+  if (!s.visible) return s.config.enabled ? 'Hidden for now: it comes back by itself.' : 'Switched off: nothing is shown on Discord.';
+  const hay = (np.title + '\n' + np.artist + '\n' + np.album).toLowerCase();
+  if (c.hideMatching.some((w) => hay.includes(w))) return 'Not shown: this song matches your "never show" words.';
+  if (np.state === 'paused' && !c.showPaused) return 'Not shown while paused: the card disappears when you pause.';
+  if (s.hidden === 'paused-timeout') return 'Not shown: paused for longer than your time limit.';
+  if (s.discord.state !== 'connected') return "Discord isn't connected, so nothing reaches it yet.";
+  return '';
+}
+function renderPreview() {
+  if (!status || !formLoaded) return;
+  const c = formConfig();
+  const real = status.nowPlaying;
+  const np = real || { title: 'Song title', artist: 'Artist', album: 'Album', artwork: '', state: 'playing', position: 0, duration: 0 };
+  const paused = np.state === 'paused';
+  const pv = $('pv');
+  pv.classList.toggle('sample', !real);
+  const why = real ? whyHidden(status, c, np) : '';
+  pv.classList.toggle('off', !!why);
+  $('pvWhy').textContent = why;
+
+  const art = $('pvArt');
+  const want = !c.privateMode && c.showAlbumArt && np.artwork ? np.artwork : '/icon.svg';
+  if (art.dataset.src !== want) { art.src = want; art.dataset.src = want; }
+  $('pvBadge').hidden = !c.showStateIcon;
+  $('pvBadge').innerHTML = paused ? PAUSE_ICON : PLAY_ICON;
+  $('pvBadge').title = paused ? 'Paused' : 'Playing';
+  $('pvTitle').textContent = c.privateMode ? 'Listening to music' : np.title;
+  $('pvArtist').textContent = c.privateMode ? '' : np.artist;
+  $('pvAlbum').textContent = c.privateMode ? '' : np.album;
+  $('pvProg').hidden = c.privateMode || paused || !c.showProgress || !real;
+  $('pvBtn').hidden = c.privateMode || !c.showButtons;
+
+  const app = c.clientId ? "your app's name" : 'YouTube Music';
+  const shown = c.privateMode ? app : c.statusDisplay === 'details' ? np.title : c.statusDisplay === 'state' ? np.artist : app;
+  $('pvWho').textContent = 'Listening to ' + app;
+  $('pvMember').textContent = '';
+  $('pvMember').append('Next to your name in the member list: ', Object.assign(document.createElement('b'), { textContent: 'Listening to ' + shown }));
+  tickProgress();
 }
 
 function fillForm(c) {
@@ -373,7 +524,10 @@ async function saveSettings() {
   } catch (e) { saveMsg('Could not reach the app to save.', true); }
 }
 // Checkboxes and menus save at once; text boxes when you leave them or pause typing.
-document.querySelectorAll('input, select, textarea').forEach((el) => el.addEventListener('change', saveSettings));
+document.querySelectorAll('input, select, textarea').forEach((el) => {
+  el.addEventListener('change', saveSettings);
+  el.addEventListener('input', renderPreview);
+});
 $('showPaused').addEventListener('change', () => { $('pauseTimeoutRow').hidden = !$('showPaused').checked; });
 for (const id of ['hideMatching', 'pauseTimeoutMinutes']) {
   $(id).addEventListener('input', () => {

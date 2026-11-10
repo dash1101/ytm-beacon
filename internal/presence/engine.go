@@ -280,6 +280,9 @@ func (e *Engine) step(ctx context.Context) {
 		e.conn, e.connID = c, id
 		e.backoff = minBackoff
 		e.sent = sentState{}
+		// A newer Discord may have been started since an older one made us fall
+		// back to the plain card, so try the full one again on every connection.
+		e.basic = false
 		info := c.Info()
 		slog.Info("connected to Discord", "user", info.User, "endpoint", info.Endpoint)
 		e.setStatus(func(d *DiscordStatus) {

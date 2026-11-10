@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.5
+
+A new look, a preview of your Discord card, and steadier behaviour with several tabs.
+
+- **New icon** for the app, the extension, the dashboard and the Discord card: a dark disc with a red ring
+  and play button on a soft rose tile, with a small broadcast badge. The play / pause badge on your card
+  is redrawn to match (red while playing, grey while paused). The toolbar icon also turns grey while
+  showing on Discord is switched off.
+- **Preview of your Discord card** on the dashboard. It shows the song, art, badge, progress bar and
+  button the way your settings make them, updates the moment you tick a box, and says why the card is
+  hidden when it is (paused, a "never show" word, switched off).
+- The dashboard's progress bar now moves smoothly and shows the time, and the dashboard has the app's
+  icon in the tab.
+- **Two YouTube Music tabs playing at once** no longer make Discord flip between them: the card stays
+  on the tab where you last pressed play.
+- After falling back to a simpler card for an older Discord, Beacon tries the full card again the next
+  time Discord connects (for example after Discord updated).
+- Changing settings from the dashboard and the toolbar popup at the same moment no longer loses one of
+  the changes, and the settings file always matches what the app uses.
+- `ytm-beacon update` downloads the files of the exact release it found, not whatever is "latest" a
+  moment later.
+- Each release now points Discord at its own copy of the logo and badges, so new art shows up straight
+  away instead of after Discord's image cache expires.
+- The toolbar popup no longer shows a stray dash when a song has no artist.
+
 ## 0.1.4
 
 Show when paused, and the pause icon that never showed.

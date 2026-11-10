@@ -66,6 +66,12 @@ function badgeFor(reply) {
   return { text: '', color: '#6b7280' };
 }
 
+// While showing on Discord is switched off or hidden for a while, the toolbar
+// icon also turns grey, so the state is clear at a glance.
+const ICON_ON = { 16: 'icons/icon16.png', 32: 'icons/icon32.png' };
+const ICON_OFF = { 16: 'icons/off16.png', 32: 'icons/off32.png' };
+let iconOff = null;
+
 function setBadge(tabId, reply) {
   if (!ext.action) return;
   const { text, color } = badgeFor(reply);
@@ -76,6 +82,12 @@ function setBadge(tabId, reply) {
     if (reply) ext.action.setBadgeText({ text }).catch(done);
     if (tabId != null) ext.action.setBadgeText({ tabId, text }).catch(done);
     if (text) ext.action.setBadgeBackgroundColor({ color }).catch(done);
+    const off = !!reply && reply.visible === false;
+    if (reply && off !== iconOff && ext.action.setIcon) {
+      iconOff = off;
+      const p = ext.action.setIcon({ path: off ? ICON_OFF : ICON_ON });
+      if (p && p.catch) p.catch(done);
+    }
   } catch (_) {
     // badge is only a hint
   }

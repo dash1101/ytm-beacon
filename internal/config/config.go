@@ -182,6 +182,25 @@ func (s *Store) Get() Config {
 
 // Set validates, stores and saves a new config.
 func (s *Store) Set(c Config) error {
+	return s.Update(func(cur *Config) error {
+		*cur = c
+		return nil
+	})
+}
+
+// Update changes the settings in one step: fn gets a copy of the current
+// settings to change, and the result is validated, saved and stored before any
+// other change can start. Two changes arriving together (the dashboard and the
+// toolbar popup, say) therefore never undo each other, and the file always
+// matches what the app uses. Nothing changes if fn or the validation fails.
+func (s *Store) Update(fn func(*Config) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.cfg
+	c.HideMatching = append([]string{}, c.HideMatching...)
+	if err := fn(&c); err != nil {
+		return err
+	}
 	if err := c.Normalize(); err != nil {
 		return err
 	}
@@ -190,9 +209,7 @@ func (s *Store) Set(c Config) error {
 			return err
 		}
 	}
-	s.mu.Lock()
 	s.cfg = c
-	s.mu.Unlock()
 	return nil
 }
 

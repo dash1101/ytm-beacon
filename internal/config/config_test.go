@@ -1,10 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -124,5 +126,57 @@ func TestEffectiveClientID(t *testing.T) {
 	t.Setenv("YTM_BEACON_CLIENT_ID", "333333333333333333")
 	if c.EffectiveClientID() != "333333333333333333" {
 		t.Error("environment must win")
+	}
+}
+
+// Two changes at the same moment (dashboard and popup) must both survive, and
+// the file must end up matching what the app uses.
+func TestConcurrentUpdatesKeepEveryChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	s, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	words := []string{}
+	for i := 0; i < 20; i++ {
+		w := fmt.Sprintf("word%02d", i)
+		words = append(words, w)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = s.Update(func(c *Config) error {
+				c.HideMatching = append(c.HideMatching, w)
+				return nil
+			})
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.Update(func(c *Config) error { c.ShowPaused = false; return nil })
+	}()
+	wg.Wait()
+	got := s.Get()
+	if len(got.HideMatching) != len(words) || got.ShowPaused {
+		t.Fatalf("a change was lost: %d words, showPaused=%v", len(got.HideMatching), got.ShowPaused)
+	}
+	again, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(again.Get()) != fmt.Sprint(got) {
+		t.Errorf("file and memory differ:\n file %+v\n  mem %+v", again.Get(), got)
+	}
+}
+
+func TestUpdateRejectsBadValuesWithoutChangingAnything(t *testing.T) {
+	s := NewMemoryStore(Default())
+	err := s.Update(func(c *Config) error { c.ShowButtons = false; c.ClientID = "abc"; return nil })
+	if err == nil {
+		t.Fatal("a bad application ID must be refused")
+	}
+	if !s.Get().ShowButtons {
+		t.Error("a refused change must leave everything as it was")
 	}
 }

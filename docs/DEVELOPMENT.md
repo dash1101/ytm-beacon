@@ -17,12 +17,13 @@ internal/
   paths/               where files live on each OS
 extension/             The browser extension (Manifest V3; one source, a manifest per browser)
 tools/mockdiscord/     A fake Discord, so you can develop without touching the real one
-tools/gen_icons.py     Regenerates the icons and Discord play/pause badges
+tools/gen_icons.py     Renders the icons and Discord play/pause badges from assets/*.svg
 scripts/               release build, install.sh, install.ps1
 embed.go               Embeds extension/ into the binary
 ```
 
-Requirements: Go (see `go.mod`), nothing else. Python + Pillow only for regenerating icons.
+Requirements: Go (see `go.mod`), nothing else. Python + Pillow and an SVG renderer (rsvg-convert,
+Inkscape or cairosvg) only for regenerating icons.
 
 ## Build, test, run
 
@@ -71,6 +72,19 @@ checks that every file a manifest or the popup refers to is really packaged.
 
 If you change files in `extension/`, rebuild the app (they're embedded) and re-run
 `ytm-beacon extension`, then reload the extension in your browser.
+
+## Artwork
+
+The SVGs in `assets/` are the sources: `icon.svg` (the logo), `icon-small.svg` (the same logo simplified for
+16 and 32 px), and `badge-play.svg` / `badge-pause.svg` (the small round badge on the Discord card). After
+editing one, run `python3 tools/gen_icons.py`: it writes the extension icons (and the grey "switched off"
+ones), `assets/logo.png`, `play.png`, `pause.png`, and the dashboard's copy `internal/server/icon.svg`
+(a test fails if that copy is out of date).
+
+Discord fetches the logo and badges from this repository itself. A release build points at its own tag
+(`.../ytm-beacon/v0.1.5/assets/logo.png`), so a release's pictures never change under it and new art
+gets a new address; other builds use `main`. Don't rename or delete the PNGs in `assets/`: older
+releases point at them.
 
 ## How the pieces talk
 

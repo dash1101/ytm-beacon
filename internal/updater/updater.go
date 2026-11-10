@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -35,11 +36,14 @@ type Options struct {
 // Developers can point the updater at another place (tests do).
 //   - YTM_BEACON_RELEASE_BASE: folder URL that holds the release assets
 //   - YTM_BEACON_LATEST_TAG:   skip asking GitHub which tag is the latest
-func releaseBase() string {
+//
+// The files come from the release of the tag that was found, not from
+// "latest", so a release published in between can't mix two versions.
+func releaseBase(tag string) string {
 	if v := os.Getenv("YTM_BEACON_RELEASE_BASE"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	return version.RepoURL + "/releases/latest/download"
+	return version.RepoURL + "/releases/download/" + url.PathEscape(tag)
 }
 
 func assetName() string {
@@ -136,7 +140,7 @@ func Run(out io.Writer, opt Options) error {
 	defer os.RemoveAll(tmp)
 
 	asset := assetName()
-	base := releaseBase()
+	base := releaseBase(tag)
 	archive := filepath.Join(tmp, asset)
 	sums := filepath.Join(tmp, "checksums.txt")
 	fmt.Fprintf(out, "Downloading %s ...\n", asset)

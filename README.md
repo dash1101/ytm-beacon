@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" width="112" alt=""></p>
+
 # YTM Beacon
 
 Show what you're listening to on **YouTube Music** as your **Discord** status: song, artist,
@@ -120,7 +122,7 @@ ytm-beacon hide 1h     # hide for a while (30m, 2h, 90...); it comes back by its
 ytm-beacon show        # back on
 ```
 
-While it's off the toolbar icon says **off**. The app and extension keep running, so turning it on
+While it's off the toolbar icon turns grey and says **off**. The app and extension keep running, so turning it on
 again is instant. "Switch off" is remembered across restarts; a timed hide is not.
 
 **What your card shows:**

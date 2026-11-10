@@ -159,3 +159,16 @@ func TestMissingChecksumEntry(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// Downloads come from the release that was found, so a release published a
+// second later can't hand over another version's files.
+func TestDownloadsComeFromTheFoundTag(t *testing.T) {
+	t.Setenv("YTM_BEACON_RELEASE_BASE", "")
+	got := releaseBase("v0.1.5")
+	if want := version.RepoURL + "/releases/download/v0.1.5"; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if strings.Contains(releaseBase("v1/../../x"), "/../") {
+		t.Error("a strange tag must not change the path")
+	}
+}

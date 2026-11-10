@@ -781,3 +781,95 @@ func TestBadgeImageFilesExist(t *testing.T) {
 		}
 	}
 }
+
+// Two tabs both playing (or a tab and a forgotten one) report every few
+// seconds in turn. The card must stay on the one where play was pressed last
+// instead of flipping with every report.
+func TestTrackerDoesNotFlipBetweenTwoPlayingTabs(t *testing.T) {
+	clk := newClock()
+	tr := NewTrackerWithClock(clk.Now)
+	tr.Put(song("a", "A", StatePlaying, 0, 0))
+	clk.Advance(time.Second)
+	tr.Put(song("b", "B", StatePlaying, 0, 0)) // play pressed in b last
+	for i := 0; i < 6; i++ {
+		clk.Advance(2 * time.Second)
+		src := "a"
+		if i%2 == 1 {
+			src = "b"
+		}
+		tr.Put(song(src, strings.ToUpper(src), StatePlaying, float64(i), 0)) // heartbeats in turn
+		if sel, _ := tr.Select(); sel.Title != "B" {
+			t.Fatalf("report %d from %s flipped the card to %s", i, src, sel.Title)
+		}
+	}
+	// Pausing b and pressing play in a again moves it to a.
+	tr.Put(song("b", "B", StatePaused, 0, 0))
+	if sel, _ := tr.Select(); sel.Title != "A" {
+		t.Errorf("the tab still playing must win, got %s", sel.Title)
+	}
+	clk.Advance(time.Second)
+	tr.Put(song("b", "B", StatePlaying, 0, 0))
+	if sel, _ := tr.Select(); sel.Title != "B" {
+		t.Errorf("pressing play again must bring b back, got %s", sel.Title)
+	}
+}
+
+func TestTrackerPicksTheTabPausedLast(t *testing.T) {
+	clk := newClock()
+	tr := NewTrackerWithClock(clk.Now)
+	tr.Put(song("a", "A", StatePaused, 0, 0))
+	clk.Advance(time.Second)
+	tr.Put(song("b", "B", StatePaused, 0, 0))
+	clk.Advance(30 * time.Second)
+	tr.Put(song("a", "A", StatePaused, 0, 0)) // "still paused" report from the older one
+	if sel, _ := tr.Select(); sel.Title != "B" {
+		t.Errorf("the tab paused last must win, got %s", sel.Title)
+	}
+}
+
+// After falling back to the plain card for an older Discord, a new connection
+// (Discord restarted, maybe updated) tries the full card again.
+func TestEngineRetriesFullCardAfterReconnect(t *testing.T) {
+	t.Setenv("YTM_BEACON_CLIENT_ID", "")
+	h := newHarness(testConfig())
+	reject := true
+	h.onNew = func(c *fakeConn) {
+		c.fail = func(a *discord.Activity) error {
+			if reject && a != nil && a.Assets != nil && a.Assets.SmallImage != "" {
+				return &discord.APIError{Code: 4000, Message: "nope"}
+			}
+			return nil
+		}
+	}
+	h.tr.Put(song("a", "One", StatePlaying, 10, 200))
+	h.step()
+	if !h.eng.basic {
+		t.Fatal("expected the fallback on the old Discord")
+	}
+	reject = false
+	h.conn().Close()
+	h.clk.Advance(time.Second)
+	h.step()
+	if h.eng.basic {
+		t.Error("a new connection must try the full card again")
+	}
+	if last := h.conn().last(); last == nil || last.Assets == nil || last.Assets.SmallImage == "" {
+		t.Errorf("want the full card on the new connection, got %+v", last)
+	}
+}
+
+func TestAssetsPointAtTheReleaseTag(t *testing.T) {
+	cases := map[string]string{
+		"v0.1.5":     "https://raw.githubusercontent.com/dash1101/ytm-beacon/v0.1.5/assets/",
+		"v1.2.3-rc1": "https://raw.githubusercontent.com/dash1101/ytm-beacon/v1.2.3-rc1/assets/",
+		"dev":        "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/",
+		"ci":         "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/",
+		"0.1.5":      "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/", // tags have a v
+		"v1/../x":    "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/",
+	}
+	for ver, want := range cases {
+		if got := assetBaseFor(ver); got != want {
+			t.Errorf("%q: got %q, want %q", ver, got, want)
+		}
+	}
+}

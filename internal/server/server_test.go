@@ -1,11 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -277,5 +279,50 @@ func TestStatusSaysWhenTheExtensionCountsAsQuiet(t *testing.T) {
 	// so a paused tab that reports once a minute is not flagged as gone.
 	if st.Extension.QuietAfterSec <= 65 {
 		t.Errorf("quietAfterSec = %d, want well over a minute", st.Extension.QuietAfterSec)
+	}
+}
+
+func TestDashboardIcon(t *testing.T) {
+	ts, _ := newTestServer(t)
+	resp := do(t, ts, "GET", "/icon.svg", "", nil)
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("icon: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") || strings.Contains(csp, "script") {
+		t.Errorf("the icon must not be able to run scripts: %q", csp)
+	}
+}
+
+// The dashboard's icon is a copy (Go can only embed its own folder's files);
+// tools/gen_icons.py makes it. This catches an edited logo without the copy.
+func TestDashboardIconMatchesTheLogo(t *testing.T) {
+	want, err := os.ReadFile("../../assets/icon.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(want, iconSVG) {
+		t.Error("internal/server/icon.svg differs from assets/icon.svg: run tools/gen_icons.py")
+	}
+}
+
+// Settings changed from two places at once both stick.
+func TestConcurrentConfigPosts(t *testing.T) {
+	ts, cfg := newTestServer(t)
+	done := make(chan struct{})
+	go func() {
+		do(t, ts, "POST", "/v1/config", `{"showPaused":false}`, nil)
+		close(done)
+	}()
+	do(t, ts, "POST", "/v1/config", `{"privateMode":true}`, nil)
+	<-done
+	if c := cfg.Get(); c.ShowPaused || !c.PrivateMode {
+		t.Errorf("a change was lost: %+v", c)
+	}
+	resp := do(t, ts, "POST", "/v1/config", `{"showPaused":`, nil)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("broken JSON: want 400, got %d", resp.StatusCode)
+	}
+	if resp := do(t, ts, "POST", "/v1/config", ``, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("an empty body changes nothing and is fine, got %d", resp.StatusCode)
 	}
 }

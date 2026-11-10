@@ -27,6 +27,11 @@ import (
 //go:embed dashboard.html
 var dashboardHTML []byte
 
+// iconSVG is the app's logo, a copy of assets/icon.svg made by tools/gen_icons.py.
+//
+//go:embed icon.svg
+var iconSVG []byte
+
 // Ports the app may listen on. The extension tries them in order, so a busy
 // port never stops the app from working. Keep in sync with extension/*.js.
 var Ports = []int{41713, 41714, 41715, 41716, 41717}
@@ -145,6 +150,7 @@ func (s *Server) buildStatus() Status {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.dashboard)
+	mux.HandleFunc("GET /icon.svg", s.icon)
 	mux.HandleFunc("GET /v1/ping", s.ping)
 	mux.HandleFunc("GET /v1/status", s.status)
 	mux.HandleFunc("POST /v1/update", s.update)
@@ -227,8 +233,15 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 func (s *Server) dashboard(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data:; connect-src 'self'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'")
 	_, _ = w.Write(dashboardHTML)
+}
+
+func (s *Server) icon(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "max-age=86400")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	_, _ = w.Write(iconSVG)
 }
 
 func (s *Server) ping(w http.ResponseWriter, _ *http.Request) {
@@ -306,11 +319,29 @@ func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) setConfig(w http.ResponseWriter, r *http.Request) {
-	c := s.d.Config.Get()
-	if !readJSON(w, r, &c) {
+	// Read the body first, then apply it on top of the settings as they are at
+	// that moment: only the fields the caller sent change.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "request too large"})
 		return
 	}
-	if err := s.d.Config.Set(c); err != nil {
+	var bad error
+	err = s.d.Config.Update(func(c *config.Config) error {
+		if len(strings.TrimSpace(string(body))) == 0 {
+			return nil
+		}
+		if e := json.Unmarshal(body, c); e != nil {
+			bad = e
+			return e
+		}
+		return nil
+	})
+	if bad != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + bad.Error()})
+		return
+	}
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -354,22 +385,30 @@ func (s *Server) visibility(w http.ResponseWriter, r *http.Request) {
 			b.Action = "hide"
 		}
 	}
-	cfg := s.d.Config.Get()
+	var enable *bool
 	switch b.Action {
 	case "hide":
 		if b.Minutes > 0 {
 			s.d.Engine.HideFor(time.Duration(min(b.Minutes, maxHideMinutes)) * time.Minute)
 		} else {
-			cfg.Enabled = false
+			off := false
+			enable = &off
 		}
 	case "show":
-		cfg.Enabled = true
+		on := true
+		enable = &on
 		s.d.Engine.CancelHide()
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `action must be "hide", "show" or "toggle"`})
 		return
 	}
-	if err := s.d.Config.Set(cfg); err != nil {
+	err := s.d.Config.Update(func(c *config.Config) error {
+		if enable != nil {
+			c.Enabled = *enable
+		}
+		return nil
+	})
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

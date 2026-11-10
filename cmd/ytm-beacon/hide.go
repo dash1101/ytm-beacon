@@ -106,7 +106,8 @@ func setEnabledInFile(on bool) error {
 	if err != nil {
 		return err
 	}
-	c := store.Get()
-	c.Enabled = on
-	return store.Set(c)
+	return store.Update(func(c *config.Config) error {
+		c.Enabled = on
+		return nil
+	})
 }

@@ -6,7 +6,8 @@
   --ok: #1a7f37;
   --bad: #cf222e;
   --warn: #9a6700;
-  --link: #5865f2;
+  --link: #d9283b;
+  --tint: #fff0ed;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -16,7 +17,8 @@
     --ok: #3fb950;
     --bad: #f85149;
     --warn: #d29922;
-    --link: #8e98ff;
+    --link: #ff6b6b;
+    --tint: #2a1c1c;
   }
 }
 body {
@@ -27,9 +29,11 @@ body {
   color: var(--fg);
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+header img { width: 28px; height: 28px; }
 h1 { font-size: 15px; margin: 0; flex: 1; }
-#version { color: var(--muted); font-size: 11px; }
+#version { color: var(--muted); font-size: 11px; border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 999px; padding: 1px 8px; }
+#version:empty { display: none; }
 ul { list-style: none; margin: 0; padding: 0; }
 li { display: flex; gap: 8px; padding: 4px 0; }
 .mark { width: 14px; text-align: center; font-weight: 700; flex: none; }
@@ -37,15 +41,15 @@ li { display: flex; gap: 8px; padding: 4px 0; }
 .bad .mark { color: var(--bad); }
 .warn .mark { color: var(--warn); }
 .detail { color: var(--muted); font-size: 12px; display: block; }
-#hint { margin: 10px 0 0; padding: 8px 10px; border-radius: 6px; background: rgba(128, 128, 128, 0.14); }
+#hint { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--tint); }
 footer { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-button { margin-top: 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--link); background: transparent; color: var(--link); font: inherit; cursor: pointer; display: block; }
+button { margin-top: 6px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--link); background: transparent; color: var(--link); font: inherit; cursor: pointer; display: block; }
 button:disabled { opacity: .5; cursor: default; }
 #pausedRow { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
 #pausedRow[hidden] { display: none; }
-#power { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--ok); }
+#power { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 9px 11px; border-radius: 12px; border: 1px solid var(--ok); }
 #power.off { border-color: var(--warn); }
 #power .what { flex: 1; min-width: 0; font-weight: 600; }
 #power .what small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }

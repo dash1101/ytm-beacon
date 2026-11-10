@@ -2,25 +2,40 @@ package presence
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/dash1101/ytm-beacon/internal/config"
 	"github.com/dash1101/ytm-beacon/internal/discord"
+	"github.com/dash1101/ytm-beacon/internal/version"
 )
 
 // The logo and the play / pause badge are sent as web addresses, served from
 // this repository's assets/ folder. Discord fetches them itself, so nobody has
 // to upload art to a Discord application (an image key that isn't uploaded just
 // shows nothing, which is how the pause icon used to go missing).
-const assetBase = "https://raw.githubusercontent.com/dash1101/ytm-beacon/main/assets/"
-
-const (
+//
+// A release points at its own tag, so the pictures it shows never change under
+// it and Discord's image cache sees new art as a new address. Other builds
+// ("dev", "ci") use the main branch.
+var (
+	assetBase  = assetBaseFor(version.Version)
 	assetLogo  = assetBase + "logo.png"
 	assetPlay  = assetBase + "play.png"
 	assetPause = assetBase + "pause.png"
 )
+
+var releaseTag = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+func assetBaseFor(ver string) string {
+	ref := "main"
+	if releaseTag.MatchString(ver) {
+		ref = ver
+	}
+	return "https://raw.githubusercontent.com/dash1101/ytm-beacon/" + ref + "/assets/"
+}
 
 // field fits text into what Discord accepts (2-128 characters).
 func field(s string) string {

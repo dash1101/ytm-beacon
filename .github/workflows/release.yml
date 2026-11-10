@@ -40,6 +40,7 @@ jobs:
             --api-secret "$AMO_JWT_SECRET" \
             --artifacts-dir dist/signed
           cp dist/signed/*.xpi dist/ytm-beacon-firefox.xpi
+          (cd dist && sha256sum ytm-beacon-firefox.xpi >> checksums.txt)
 
       - name: Publish
         env:

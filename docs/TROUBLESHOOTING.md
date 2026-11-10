@@ -62,7 +62,7 @@ If you run the *browser* as a Flatpak/Snap, that's fine: the extension only need
 
 ## Discord is connected but nothing shows
 
-- **Did you switch it off?** The extension's toolbar icon says **off**, and the dashboard's top card says
+- **Did you switch it off?** The extension's toolbar icon is grey and says **off**, and the dashboard's top card says
   *Switched off* or *Hidden for ...*. Click **Show on Discord**, press `Alt+Shift+M`, or run
   `ytm-beacon show`. (`ytm-beacon doctor` reports it too.)
 - **Private mode or a "never show" word?** Private mode only shows *Listening to music*; a song that

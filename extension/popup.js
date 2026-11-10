@@ -258,7 +258,7 @@ async function render() {
   const np = status.nowPlaying;
   if (status.presenceActive && np) {
     // Private mode shows nothing about the song, so the popup doesn't either.
-    const detail = status.config.privateMode ? 'Private mode: only "Listening to music"' : `${np.title} — ${np.artist}`;
+    const detail = status.config.privateMode ? 'Private mode: only "Listening to music"' : [np.title, np.artist].filter(Boolean).join(' — ');
     checks.append(row('ok', 'Showing on Discord', detail));
   } else if (np && status.hidden === 'filtered') {
     checks.append(row('warn', 'Not shown: matches your "never show" words', 'Change them on the dashboard.'));
