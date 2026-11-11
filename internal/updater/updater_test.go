@@ -3,10 +3,10 @@ package updater
 import (
 	"archive/tar"
 	"bytes"
-	"errors"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
