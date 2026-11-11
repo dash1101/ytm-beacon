@@ -2,6 +2,13 @@
 
 # YTM Beacon
 
+> **YTM Beacon is now part of [YTM Starcast](https://github.com/dash1101/ytm-starcast).** YTM Starcast shows YouTube
+> Music as a Discord status just like YTM Beacon, and adds a phone remote for YouTube Music and improvements inside
+> YouTube Music, each with its own switch. Its installer brings YTM Beacon's settings along and removes the old app.
+> YTM Starcast needs a Chromium-based browser (Chrome, Brave, Edge…) on Linux or Windows; in Firefox or on macOS, YTM
+> Beacon keeps working as it is. This repository is archived: existing installs and releases keep working, but there
+> will be no new ones.
+
 Show what you're listening to on **YouTube Music** as your **Discord** status: song, artist,
 album art, a live progress bar, and a "Listen on YouTube Music" button.
 
