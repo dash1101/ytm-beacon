@@ -96,7 +96,7 @@ async function renderPower(port, status) {
   if (status.visible) {
     box.className = '';
     what.append('Showing on Discord', sub);
-    sub.textContent = shortcut ? `${shortcut} switches it off` : 'Stops until you turn it back on';
+    sub.textContent = shortcut ? `${shortcut} turns it off` : 'Stops until you turn it back on';
     buttons.push(button('Stop', 'hide', 0), button('1 hour', 'hide', 60));
   } else if (!status.config.enabled) {
     box.className = 'off';
@@ -211,9 +211,12 @@ async function musicRow(heardRecently) {
       return row('bad', `Sees "${p.title}" but the app isn't receiving it`, 'Run ytm-beacon doctor, or open the dashboard.');
     case 'ad':
       return row('warn', 'An ad is playing', 'Nothing is shown on Discord during ads.');
-    case 'nothing-loaded':
-      return row('warn', 'Nothing is playing yet', 'Play a song in the YouTube Music tab. ' +
-        `(page script ${p.pageScript ? 'on' : 'off'}, in-page song ${p.pageMetadata ? 'found' : 'none'}, browser song ${p.nativeMetadata ? 'found' : 'none'})`);
+    case 'nothing-loaded': {
+      const r = row('warn', 'Nothing is playing yet', 'Play a song in the YouTube Music tab.');
+      // the technical details, for bug reports, without cluttering the message
+      r.title = `page script ${p.pageScript ? 'on' : 'off'}, in-page song ${p.pageMetadata ? 'found' : 'none'}, browser song ${p.nativeMetadata ? 'found' : 'none'}`;
+      return r;
+    }
     default:
       return row('warn', "YouTube Music's player isn't ready", 'Wait a moment, or reload the tab.');
   }
@@ -228,6 +231,7 @@ async function render() {
   document.getElementById('pausedRow').hidden = true;
 
   const found = await fetchStatus();
+  document.getElementById('dashboard').hidden = !found; // there's no dashboard without the app
   if (!found) {
     checks.append(row('bad', 'YTM Beacon app is not running'));
     hint.textContent =
@@ -249,25 +253,32 @@ async function render() {
   const seen = status.extension && status.extension.lastSeenAgoSec;
   // A paused tab in the background only reports about once a minute, so "quiet" is the app's number.
   const quiet = (status.extension && status.extension.quietAfterSec) || 20;
-  if (seen == null || seen > quiet) {
+  const musicProblem = seen == null || seen > quiet;
+  if (musicProblem) {
     checks.append(await musicRow(seen));
   } else {
     checks.append(row('ok', 'Receiving from YouTube Music'));
   }
 
+  // The last line says what your profile shows, or the one reason it shows nothing (if no line above already did).
   const np = status.nowPlaying;
+  const discordOk = status.discord && status.discord.state === 'connected';
   if (status.presenceActive && np) {
     // Private mode shows nothing about the song, so the popup doesn't either.
     const detail = status.config.privateMode ? 'Private mode: only "Listening to music"' : [np.title, np.artist].filter(Boolean).join(' — ');
-    checks.append(row('ok', 'Showing on Discord', detail));
-  } else if (np && status.hidden === 'filtered') {
+    checks.append(row('ok', 'On your profile now', detail));
+  } else if (!np) {
+    if (!musicProblem) checks.append(row('warn', 'Nothing is playing', 'Play a song in YouTube Music.'));
+  } else if (!discordOk || status.hidden === 'off' || status.hidden === 'snoozed') {
+    // the Discord line or the switch at the top already says why
+  } else if (status.hidden === 'filtered') {
     checks.append(row('warn', 'Not shown: matches your "never show" words', 'Change them on the dashboard.'));
-  } else if (np && (status.hidden === 'off' || status.hidden === 'snoozed')) {
-    checks.append(row('warn', 'Not showing on Discord', 'You turned it off (see the switch above).'));
-  } else if (np && np.state === 'paused') {
-    checks.append(row('warn', 'Paused', 'Presence is hidden while paused (see dashboard settings).'));
+  } else if (np.state === 'paused') {
+    const why = status.hidden === 'paused-timeout' ? 'Paused for longer than your time limit (change it on the dashboard).'
+      : 'Turn on "Show when paused" above to keep it on your profile.';
+    checks.append(row('warn', 'Not shown while paused', why));
   } else {
-    checks.append(row('warn', 'Not showing on Discord', 'Play a song to start.'));
+    checks.append(row('warn', 'Not on your profile yet', 'It usually appears within a few seconds.'));
   }
 }
 

@@ -221,9 +221,11 @@ func Uninstall(out io.Writer, purge bool) error {
 		}
 	}
 	fmt.Fprintln(out, "\nYTM Beacon is removed. One thing is left that only you can do: remove the extension from your browser")
-	fmt.Fprintln(out, "(open its extensions page, find YTM Beacon, click Remove). Nothing else of it remains.")
+	fmt.Fprintln(out, "(open its extensions page, find YTM Beacon, click Remove).")
 	if !purge {
-		fmt.Fprintln(out, "Your settings were kept, in case you install it again. Run `ytm-beacon uninstall --purge` to delete them too.")
+		fmt.Fprintln(out, "Your settings and log were kept, in case you install it again. Run `ytm-beacon uninstall --purge` to delete them too.")
+	} else {
+		fmt.Fprintln(out, "Nothing else of it remains.")
 	}
 	return nil
 }

@@ -153,7 +153,12 @@ func interactive() int {
 		// double-clicked, so the intent is clear: just install.
 		if !ownsConsole() {
 			fmt.Print("\nInstall it now? [Y/n] ")
-			line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+			if err != nil && strings.TrimSpace(line) == "" {
+				// No answer at all (input isn't really a keyboard): don't install unasked.
+				fmt.Println("\n\nNothing was installed. Run  ytm-beacon install  when you're ready.")
+				return 0
+			}
 			if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
 				fmt.Printf(usage, server.Ports[0], version.RepoURL)
 				return 0

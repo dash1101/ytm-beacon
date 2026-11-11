@@ -66,7 +66,7 @@ func latestTag() (string, error) {
 	}
 	resp, err := client.Head(version.RepoURL + "/releases/latest")
 	if err != nil {
-		return "", fmt.Errorf("cannot reach GitHub: %w (are you online?)", err)
+		return "", offline("check for a new version", err)
 	}
 	resp.Body.Close()
 	loc := resp.Header.Get("Location")
@@ -166,11 +166,21 @@ func Run(out io.Writer, opt Options) error {
 	return cmd.Run()
 }
 
+// offline explains a network failure in plain words, keeping the technical reason on its own line for bug reports.
+func offline(what string, err error) error {
+	reason := err.Error()
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		reason = ue.Err.Error() // drop the repeated method and address
+	}
+	return fmt.Errorf("couldn't reach GitHub to %s. Check your internet connection and try again.\n  (%s)", what, reason)
+}
+
 func download(url, dst string) error {
 	client := &http.Client{Timeout: 3 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+		return offline("download "+path.Base(url), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

@@ -3,12 +3,14 @@ package updater
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -170,5 +172,17 @@ func TestDownloadsComeFromTheFoundTag(t *testing.T) {
 	}
 	if strings.Contains(releaseBase("v1/../../x"), "/../") {
 		t.Error("a strange tag must not change the path")
+	}
+}
+
+// Being offline is said in plain words; the technical reason stays, without the repeated request line.
+func TestOfflineMessage(t *testing.T) {
+	err := offline("check for a new version", &url.Error{Op: "Head", URL: "https://github.com/x", Err: errors.New("dial tcp: network is unreachable")})
+	msg := err.Error()
+	if !strings.Contains(msg, "Check your internet connection") || !strings.Contains(msg, "(dial tcp: network is unreachable)") {
+		t.Errorf("unexpected message: %q", msg)
+	}
+	if strings.Contains(msg, "Head") || strings.Contains(msg, "https://github.com/x") {
+		t.Errorf("the request line should not be repeated: %q", msg)
 	}
 }

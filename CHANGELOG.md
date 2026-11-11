@@ -23,7 +23,14 @@ A new look, a preview of your Discord card, and steadier behaviour with several 
   moment later.
 - Each release now points Discord at its own copy of the logo and badges, so new art shows up straight
   away instead of after Discord's image cache expires.
-- The toolbar popup no longer shows a stray dash when a song has no artist.
+- The toolbar popup says each problem once, and the right one: with Discord closed it no longer tells you to
+  "play a song", when nothing plays it doesn't add a second warning, and the debugging details for a tab
+  that isn't reporting moved into the line's tooltip. It no longer shows a stray dash when a song has no
+  artist, and its paused hint points at the "Show when paused" switch right there.
+- Running `ytm-beacon` without arguments from something that isn't a terminal no longer installs it
+  without an answer (double-clicking it on Windows still installs, as before).
+- `update` explains being offline in plain words instead of printing the raw network error.
+- `uninstall` says that your settings and log were kept (unless you purge them).
 
 ## 0.1.4
 
